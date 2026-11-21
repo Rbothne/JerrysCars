@@ -13,8 +13,9 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Listing record | `cartrack/listings.py` | `make_listing()`: the one record every reader hands back. `None` means the source does not say. |
 | Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
 | VINs | `cartrack/vin.py` | Check digit, and identity from NHTSA's free vPIC service, 50 VINs a request. A decoded VIN's identity wins over the dealer's wording. |
-| Build | `build.py` | Reads every dealer that has a reader, updates the catalogue, decodes new VINs, writes `site/data/cars.json`. |
-| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the filtering and ordering. |
+| Value | `cartrack/value.py` | What cars like each one usually ask, from the other cars in the catalogue: the lower of a price model and the car's nearest neighbours. How far to trust it is in `research/09-value.md`. |
+| Build | `build.py` | Reads every dealer that has a reader, updates the catalogue, decodes new VINs, judges value, writes `site/data/cars.json`. |
+| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the filtering and ordering: make, model, price, year, mileage, body, drive, fuel, dealer, local lots only, price cuts only, below typical price only. Opens in best-value order. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
 | Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. |
 
@@ -23,18 +24,18 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 213 Python tests
-    node --test tests/js/logic.test.mjs         # 13 page-logic tests
+    py -m unittest discover -s tests -t .       # 228 Python tests
+    node --test tests/js/logic.test.mjs         # 25 page-logic tests
 
 ## Publishing the page
 
-Not done yet: this folder is not a git repository. To publish:
+Published at https://rbothne.github.io/JerrysCars/ from https://github.com/Rbothne/JerrysCars. The "Track cars"
+workflow runs twice a day, on a push to `main`, and by hand from the Actions tab. GitHub Pages is on with
+"GitHub Actions" as its source; a workflow cannot turn that on itself, so a new repository needs it set once
+in Settings, under Pages.
 
-1. Create a GitHub repository and push this folder to its `main` branch. GitHub Pages on a free account needs the repository to be public.
-2. In the repository's Settings, under Pages, set the source to "GitHub Actions".
-3. Run the "Track cars" workflow once by hand. After that it runs twice a day.
-
-The workflow has not run on GitHub yet. Whether every dealer site answers GitHub's servers is unknown until it does; a dealer that refuses is reported in the run log and keeps its last known cars.
+From GitHub's servers on 2026-11-21 the build read 19 of 19 dealers. A dealer that refuses is reported in the
+run log and keeps its last known cars.
 
 ## Configuration
 
@@ -81,6 +82,6 @@ Known limits:
 
 - Readers for Craigslist and the city impound auction, and the Facebook extension.
 - Identity from a listing's title, and linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
-- Comparable segments and discount scoring. The page orders by price cut, which needs a few days of history to mean anything.
+- A net figure after tax, title and repairs, and how fast each model sells. Price-cut ordering needs a few days of history to mean anything.
 
-Research behind these choices is in `research/`, numbered 01 to 07.
+Research behind these choices is in `research/`, numbered 01 to 09.

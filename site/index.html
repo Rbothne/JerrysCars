@@ -8,11 +8,13 @@
   :root {
     --page: #f6f5f1; --card: #ffffff; --ink: #1c1b19; --soft: #66635c; --line: #dedbd3;
     --accent: #0f5c4a; --accent-ink: #ffffff; --cut: #a43a1c; --cut-wash: #fbe9e2; --blank: #e9e6de;
+    --good: #0f5c4a; --good-wash: #e0f1ea;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --page: #171614; --card: #211f1c; --ink: #edeae3; --soft: #a39f95; --line: #34312c;
       --accent: #6fcfb4; --accent-ink: #10201b; --cut: #ffab8f; --cut-wash: #3a211a; --blank: #2b2925;
+      --good: #8fdcc4; --good-wash: #17332b;
     }
   }
   * { box-sizing: border-box; }
@@ -21,10 +23,13 @@
   header { padding-top: 28px; }
   h1 { margin: 0; font-size: 1.7rem; letter-spacing: -0.01em; }
   #built { margin: 4px 0 0; color: var(--soft); font-size: 0.92rem; }
-  form {
-    position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end;
-    margin: 18px 0 6px; padding: 12px 0; background: var(--page); border-bottom: 1px solid var(--line);
-  }
+  form { margin: 18px 0 6px; padding: 12px 0; background: var(--page); border-bottom: 1px solid var(--line); }
+  @media (min-width: 800px) and (min-height: 700px) { form { position: sticky; top: 0; z-index: 2; } }
+  .row { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: end; }
+  details { margin-top: 10px; }
+  summary { cursor: pointer; color: var(--accent); font-size: 0.92rem; padding: 4px 0; width: fit-content; }
+  details .row { margin-top: 8px; }
+  #clear { font: inherit; font-size: 0.92rem; color: var(--accent); background: none; border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; cursor: pointer; margin-bottom: 1px; }
   label { display: grid; gap: 3px; font-size: 0.78rem; color: var(--soft); flex: 1 1 8rem; min-width: 0; }
   label.wide { flex: 3 1 14rem; }
   label.check { flex: 0 0 auto; }
@@ -43,7 +48,9 @@
   .car h2 a { color: inherit; text-decoration: none; }
   .car h2 a:hover { text-decoration: underline; }
   .price { font-size: 1.45rem; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .cut { justify-self: start; background: var(--cut-wash); color: var(--cut); border-radius: 5px; padding: 2px 8px; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+  .cut, .under { justify-self: start; border-radius: 5px; padding: 2px 8px; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
+  .cut { background: var(--cut-wash); color: var(--cut); }
+  .under { background: var(--good-wash); color: var(--good); }
   .facts, .dealer { margin: 0; color: var(--soft); font-size: 0.9rem; }
   .vin { margin: 0; color: var(--soft); font: 0.78rem ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
   #more { display: block; margin: 22px auto 0; font: inherit; padding: 9px 18px; border-radius: 6px; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
@@ -60,29 +67,77 @@
 </header>
 <main>
   <form id="filters" onsubmit="return false">
-    <label class="wide">Search
-      <input type="search" name="text" placeholder="year, make, model" autocomplete="off">
-    </label>
-    <label>Top price
-      <input type="number" name="maxPrice" min="0" step="500" inputmode="numeric" placeholder="any">
-    </label>
-    <label>Top mileage
-      <input type="number" name="maxMiles" min="0" step="5000" inputmode="numeric" placeholder="any">
-    </label>
-    <label>Dealer
-      <select name="dealer"><option value="">All dealers</option></select>
-    </label>
-    <label>Order
-      <select name="order">
-        <option value="drop">Biggest price cut</option>
-        <option value="share">Biggest cut by share</option>
-        <option value="new">Newest listed</option>
-        <option value="old">Longest listed</option>
-        <option value="price">Lowest price</option>
-        <option value="miles">Lowest mileage</option>
-      </select>
-    </label>
-    <label class="check"><input type="checkbox" name="droppedOnly"> Price cuts only</label>
+    <div class="row">
+      <label class="wide">Search
+        <input type="search" name="text" placeholder="year, make, model, trim" autocomplete="off">
+      </label>
+      <label>Make
+        <select name="make"><option value="">Any make</option></select>
+      </label>
+      <label>Model
+        <select name="model" disabled><option value="">Any model</option></select>
+      </label>
+      <label>Top price
+        <input type="number" name="maxPrice" min="0" step="500" inputmode="numeric" placeholder="any">
+      </label>
+      <label>Order
+        <select name="order">
+          <option value="value">Best value</option>
+          <option value="drop">Biggest price cut</option>
+          <option value="share">Biggest cut by share</option>
+          <option value="new">Newest listed</option>
+          <option value="old">Longest listed</option>
+          <option value="price">Lowest price</option>
+          <option value="miles">Lowest mileage</option>
+          <option value="year">Newest model year</option>
+        </select>
+      </label>
+    </div>
+    <details>
+      <summary>More filters</summary>
+      <div class="row">
+        <label>Lowest price
+          <input type="number" name="minPrice" min="0" step="500" inputmode="numeric" placeholder="any">
+        </label>
+        <label>Year from
+          <input type="number" name="minYear" min="1980" max="2030" step="1" inputmode="numeric" placeholder="any">
+        </label>
+        <label>Year to
+          <input type="number" name="maxYear" min="1980" max="2030" step="1" inputmode="numeric" placeholder="any">
+        </label>
+        <label>Top mileage
+          <input type="number" name="maxMiles" min="0" step="5000" inputmode="numeric" placeholder="any">
+        </label>
+        <label>Body
+          <select name="body"><option value="">Any body</option></select>
+        </label>
+        <label>Drive
+          <select name="drive">
+            <option value="">Any drive</option>
+            <option value="four">4WD or AWD</option>
+            <option value="two">Two-wheel drive</option>
+          </select>
+        </label>
+        <label>Fuel
+          <select name="fuel">
+            <option value="">Any fuel</option>
+            <option value="gas">Gas</option>
+            <option value="hybrid">Hybrid</option>
+            <option value="electric">Electric</option>
+            <option value="diesel">Diesel</option>
+          </select>
+        </label>
+        <label>Dealer
+          <select name="dealer"><option value="">All dealers</option></select>
+        </label>
+      </div>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="underOnly"> Below typical price only</label>
+        <label class="check"><input type="checkbox" name="droppedOnly"> Price cuts only</label>
+        <label class="check"><input type="checkbox" name="localOnly"> Local lots only</label>
+        <button id="clear" type="button">Clear filters</button>
+      </div>
+    </details>
   </form>
   <p id="count" aria-live="polite"></p>
   <ul id="cars"></ul>
@@ -90,6 +145,7 @@
   <button id="more" type="button" hidden>Show more</button>
 </main>
 <footer>
+  <p>Best value compares a car's price with what similar cars in this list ask: the same model within two years and 30,000 miles, adjusted for year, mileage, trim and engine. A car is marked only when it sits a tenth or more under that, and only when there are at least three similar cars to go by. The estimate cannot see condition, accident history or a branded title, and it is loosest for cars under $10,000, so treat a mark as a reason to look, not as an appraisal.</p>
   <p>Prices are asking prices read from each dealer's own website. A price cut compares today's price with the first price this tracker saw for that car, so a car cut before tracking began shows no cut.</p>
   <p>Days listed counts from the dealer's own stock date where the site gives one, otherwise from the first day the tracker saw the car. Dealer fees, tax and title are not included.</p>
 </footer>

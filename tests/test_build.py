@@ -149,6 +149,55 @@ class PageData(unittest.TestCase):
         catalogue.record(self.db, car("peckdaniel.com", "1", price=None))
         self.assertEqual(self.cars(), [])
 
+    def test_a_car_says_what_it_runs_on(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", fuel="Gasoline"))
+        catalogue.record(self.db, car("peckdaniel.com", "2", fuel="Diesel"))
+        catalogue.record(self.db, car("peckdaniel.com", "3", fuel="Electric"))
+        catalogue.record(self.db, car("peckdaniel.com", "4", fuel="Flexible Fuel Vehicle (FFV)"))
+        catalogue.record(self.db, car("peckdaniel.com", "5"))
+        self.assertEqual([one["fuel"] for one in self.cars()], ["gas", "diesel", "electric", "gas", None])
+
+    def test_the_vin_says_when_a_petrol_car_is_a_hybrid(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", vin="1HGCM82633A004352", fuel="Gasoline"))
+        catalogue.save_decodes(self.db, {"1HGCM82633A004352": {
+            "ErrorCode": "0", "ModelYear": "2012", "Make": "TOYOTA", "Model": "Camry",
+            "ElectrificationLevel": "Strong HEV (Hybrid Electric Vehicle)"}}, NOW)
+        self.assertEqual(self.cars()[0]["fuel"], "hybrid")
+
+    def test_a_car_sold_online_is_told_from_one_on_a_lot(self):
+        online = {"key": "carvana.com", "host": "carvana.com", "name": "Carvana", "platform": "carvana"}
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        catalogue.record(self.db, car("carvana.com", "2"))
+        shown = build.page_data(self.db, [PECK, online], NOW)["cars"]
+        self.assertEqual([(one["id"], one["kind"]) for one in shown], [("carvana.com:2", "online"), ("peckdaniel.com:1", "lot")])
+
+    def test_a_car_carries_the_typical_price_it_was_judged_against(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        catalogue.record(self.db, car("peckdaniel.com", "2"))
+        shown = build.page_data(self.db, [PECK], NOW, judge=lambda cars, year: {
+            "peckdaniel.com:1": {"typical": 8000, "similar": 5}})["cars"]
+        self.assertEqual([(one["typical"], one["similar"]) for one in shown], [(8000, 5), (None, None)])
+
+    def test_the_judge_is_given_each_vehicle_once_with_what_its_vin_says(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", vin="1HGCM82633A004352", price=6500, fuel="Gasoline"))
+        catalogue.record(self.db, car("jimkerasnissan.com", "9", vin="1HGCM82633A004352", price=6200))
+        catalogue.save_decodes(self.db, {"1HGCM82633A004352": {
+            "ErrorCode": "0", "ModelYear": "2012", "Make": "TOYOTA", "Model": "Camry", "Series": "LE",
+            "EngineCylinders": "4", "DisplacementL": "2.5", "GVWR": "Class 1C: 4,001 - 5,000 lb (1,814 - 2,268 kg)"}}, NOW)
+        given = []
+
+        def judge(cars, year):
+            given.extend(cars)
+            given.append(year)
+            return {}
+        build.page_data(self.db, [PECK, KERAS], "2026-11-25T05:00", judge=judge)
+        self.assertEqual(len(given), 2)
+        self.assertEqual(given[1], 2026)
+        self.assertEqual({name: given[0][name] for name in ("id", "price", "year", "make", "model", "miles", "series",
+                                                             "cylinders", "litres", "weight_class")},
+                         {"id": "jimkerasnissan.com:9", "price": 6200, "year": 2012, "make": "toyota", "model": "Camry",
+                          "miles": 134200, "series": "LE", "cylinders": 4.0, "litres": 2.5, "weight_class": "1"})
+
     def test_the_page_says_when_it_was_built_and_what_was_read(self):
         catalogue.record(self.db, car("peckdaniel.com", "1"))
         data = build.page_data(self.db, [PECK, KERAS], NOW, report=[{"dealer": "peckdaniel.com", "ok": True, "read": 1}])

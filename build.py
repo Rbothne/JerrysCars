@@ -8,12 +8,14 @@ A dealer whose read fails keeps what the catalogue already knew about it; the ot
 import datetime
 import json
 import pathlib
+import re
 import sys
 
-from cartrack import catalogue, fetch, vin
+from cartrack import catalogue, fetch, value, vin
 from cartrack.readers import READERS
 
 ROOT = pathlib.Path(__file__).parent
+ONLINE = {"carvana"}                              # platforms that deliver a car instead of keeping a lot to visit
 
 
 def read_dealers(db, dealers, readers, get, now, say=print):
@@ -56,11 +58,40 @@ def _days(since, now):
     return (datetime.date.fromisoformat(now[:10]) - datetime.date.fromisoformat(since[:10])).days
 
 
-def page_data(db, dealers, now, report=None):
+def _fuel(listed, decoded):
+    """What the car runs on, in the page's four words. The listing says petrol for a hybrid; the VIN knows better."""
+    level = decoded.get("ElectrificationLevel") or ""
+    listed = (listed or "").lower()
+    if "BEV" in level or "electric" in listed:
+        return "electric"
+    if "HEV" in level:
+        return "hybrid"
+    if "diesel" in listed:
+        return "diesel"
+    return "gas" if "gas" in listed or "flex" in listed else None
+
+
+def _number(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _engine(decoded):
+    """What the VIN adds for the value judgement: series, engine size and weight class."""
+    weight = re.search(r"Class (\d)", decoded.get("GVWR") or "")
+    return {"series": decoded.get("Series"), "cylinders": _number(decoded.get("EngineCylinders")),
+            "litres": _number(decoded.get("DisplacementL")), "weight_class": weight.group(1) if weight else None}
+
+
+def page_data(db, dealers, now, report=None, judge=value.judge):
     """What the page shows: every live car with a price, how long it has been for sale, and what its price
     has done. `was` and `drop` compare today's price with the first one the tracker saw. A car listed in
-    several places is shown once, at its lowest price, with `places` saying how many."""
+    several places is shown once, at its lowest price, with `places` saying how many. `typical` is what cars
+    like it ask and `similar` how many that rests on (cartrack/value.py); both are None for a car not judged."""
     by_key = {dealer["key"]: dealer for dealer in dealers}
+    decodes = {vin: json.loads(row) for vin, row in db.execute("SELECT vin, row_json FROM vin_decode")}
     vehicles = {}                                 # one physical car -> the listings of it; a group lists a car on each of its sites
     for row in db.execute("SELECT * FROM listing WHERE gone IS NULL AND price IS NOT NULL ORDER BY id").fetchall():
         points = [point[0] for point in db.execute(
@@ -77,12 +108,17 @@ def page_data(db, dealers, now, report=None):
             "first_seen": row["first_seen"],
             "year": row["year"], "make": row["make"], "model": row["model"], "trim": row["trim"],
             "body": row["body"], "drive": row["drive"], "miles": row["miles"], "color": row["color"], "vin": row["vin"],
+            "fuel": _fuel(row["fuel"], decodes.get(row["vin"], {})),
+            "kind": "online" if dealer.get("platform") in ONLINE else "lot",
             "dealer": row["seller_name"] if not dealer else dealer.get("name"), "dealer_key": row["source"],
             "dealer_miles": dealer.get("miles"), "city": row["city"], "state": row["state"],
             "photo": photos[0] if photos else None,
         })
     cars = sorted(({**min(listed, key=lambda car: car["price"]), "places": len(listed)} for listed in vehicles.values()),
                   key=lambda car: car["id"])
+    judged = judge([{**car, **_engine(decodes.get(car["vin"], {}))} for car in cars], int(now[:4]))
+    for car in cars:
+        car["typical"], car["similar"] = (judged.get(car["id"], {}).get(name) for name in ("typical", "similar"))
     counts = {}
     for car in cars:
         counts[car["dealer_key"]] = counts.get(car["dealer_key"], 0) + 1

@@ -1,6 +1,6 @@
 // The page: load the cars build.py wrote, and show the ones the filters allow. The choosing is in logic.js.
 
-import { sorted, visible } from "./logic.js";
+import { NOTABLE, sorted, under, visible } from "./logic.js";
 
 const STEP = 120;                                  // cars drawn at a time
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -18,6 +18,23 @@ function make(tag, className, text) {
   return node;
 }
 
+const NAMES = { bmw: "BMW", gmc: "GMC", mini: "MINI", suv: "SUV" };
+const named = (word) => NAMES[word] || (word || "").replace(/(^|[\s-])([a-z])/g, (all, gap, letter) => gap + letter.toUpperCase());
+
+/** Fill a select with the values of `field` found in `list`, commonest first, each with its count. */
+function choices(select, list, field, label = named) {
+  const counts = new Map();
+  for (const car of list) if (car[field]) counts.set(car[field], (counts.get(car[field]) || 0) + 1);
+  const options = [...counts].sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+  select.replaceChildren(select.options[0], ...options.map(([value, count]) => new Option(`${label(value)} (${count})`, value)));
+}
+
+function models() {
+  const make = form.elements.make.value;
+  choices(form.elements.model, make ? cars.filter((car) => car.make === make) : [], "model", (model) => model);
+  form.elements.model.disabled = !make;
+}
+
 const web = (address) => (/^https?:\/\//.test(address || "") ? address : null);
 
 function card(car) {
@@ -30,6 +47,12 @@ function card(car) {
   if (web(car.url)) Object.assign(link, { href: car.url, rel: "noopener noreferrer", target: "_blank" });
   heading.append(link);
   body.append(heading, make("div", "price", dollars.format(car.price)));
+  const below = under(car);
+  if (below && below.share >= NOTABLE) {
+    const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);
+    badge.title = `Similar cars ask about ${dollars.format(car.typical)}, going by ${car.similar} of them.`;
+    body.append(badge);
+  }
   if (car.drop) body.append(make("div", "cut", `was ${dollars.format(car.was)}, down ${dollars.format(car.drop)}`));
   const miles = car.miles == null ? "mileage not given" : `${whole.format(car.miles)} miles`;
   body.append(make("p", "facts", `${miles} · listed ${car.days} day${car.days === 1 ? "" : "s"}`));
@@ -45,10 +68,20 @@ function filters() {
   const data = new FormData(form);
   return {
     text: data.get("text"),
+    make: data.get("make"),
+    model: data.get("model"),
+    minPrice: Number(data.get("minPrice")) || 0,
     maxPrice: Number(data.get("maxPrice")) || 0,
+    minYear: Number(data.get("minYear")) || 0,
+    maxYear: Number(data.get("maxYear")) || 0,
     maxMiles: Number(data.get("maxMiles")) || 0,
+    body: data.get("body"),
+    drive: data.get("drive"),
+    fuel: data.get("fuel"),
     dealer: data.get("dealer"),
+    localOnly: data.get("localOnly") === "on",
     droppedOnly: data.get("droppedOnly") === "on",
+    underOnly: data.get("underOnly") === "on",
   };
 }
 
@@ -60,7 +93,9 @@ function draw() {
   more.hidden = matching.length <= shown;
 }
 
+form.elements.make.addEventListener("change", models);        // before the redraw below: the old model no longer applies
 form.addEventListener("input", () => { shown = STEP; draw(); });
+document.getElementById("clear").addEventListener("click", () => { form.reset(); models(); shown = STEP; draw(); });
 more.addEventListener("click", () => { shown += STEP; draw(); });
 
 try {
@@ -68,6 +103,8 @@ try {
   if (!answer.ok) throw new Error(`data/cars.json answered ${answer.status}`);
   const data = await answer.json();
   cars = data.cars;
+  choices(form.elements.make, cars, "make");
+  choices(form.elements.body, cars, "body");
   const select = form.elements.dealer;
   for (const dealer of [...data.dealers].sort((a, b) => (a.name || a.key).localeCompare(b.name || b.key))) {
     if (dealer.cars) select.append(new Option(`${dealer.name || dealer.key} (${dealer.cars})`, dealer.key));
