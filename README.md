@@ -1,6 +1,8 @@
 # CraigsCars
 
 A catalogue of used cars for sale around Memphis, Tennessee, with their price history, and a page that shows them.
+It reads dealers' own websites and Craigslist's for-sale-by-owner listings. The dealers are the yardstick; the
+cars worth finding are the ones priced well under them.
 
 Python standard library only. Tested with Python 3.14 and Node 26.
 
@@ -10,27 +12,31 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 |---|---|---|
 | Dealer discovery | `discover.py`, `cartrack/dealers.py` | Dealers within the radius of the home point, and the website platform each runs on. Writes `dealers.json`. |
 | Readers | `cartrack/readers/` | One per dealer platform: DealerOn, AutoRevo, Dealer Car Search, Team Velocity, DealerFire, Dealer Alchemist, DealerCenter, Carsforsale.com, Carvana. Each gives back listings and whether it saw the whole inventory. |
+| Other sources | `cartrack/sources/` | Readers for places that are not one dealer's website, listed by hand in `sources.json`. Craigslist by owner is the first: one search page a run, and each listing's own page once. |
+| Naming | `cartrack/identify.py` | Make and model for a listing that gives them only in the seller's words ("chevy silverado lt"), matched against the models the catalogue knows from decoded VINs. |
 | Listing record | `cartrack/listings.py` | `make_listing()`: the one record every reader hands back. `None` means the source does not say. |
 | Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
 | VINs | `cartrack/vin.py` | Check digit, and identity from NHTSA's free vPIC service, 50 VINs a request. A decoded VIN's identity wins over the dealer's wording. |
 | Value | `cartrack/value.py` | What cars like each one usually ask, from the other cars in the catalogue: the lower of a price model and the car's nearest neighbours. How far to trust it is in `research/09-value.md`. |
 | Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). Title and registration are not in it. |
-| Build | `build.py` | Reads every dealer that has a reader, updates the catalogue, decodes new VINs, judges value, writes `site/data/cars.json`. |
-| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: make, model, price, year, mileage, body, drive, fuel, dealer, local lots only, price cuts only, below typical price only. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed), ascending or descending, and opens with the cars furthest under similar ones first. |
+| Build | `build.py` | Reads every source and every dealer that has a reader, updates the catalogue, decodes new VINs, names the listings that have only a seller's words, judges value, writes `site/data/cars.json`. |
+| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed), ascending or descending, and opens with the cars furthest under similar ones first. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
 | Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. |
 
 ## Run
 
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
-    py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
+    py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 253 Python tests
-    node --test tests/js/logic.test.mjs         # 33 page-logic tests
+    py -m unittest discover -s tests -t .       # 297 Python tests
+    node --test tests/js/logic.test.mjs         # 48 page-logic tests
 
 ## Publishing the page
 
-Published at https://rbothne.github.io/JerrysCars/ from https://github.com/Rbothne/JerrysCars. The "Track cars"
+Published at https://rbothne.github.io/jerryscars/ from https://github.com/Rbothne/jerryscars. The page's address
+follows the repository's name letter for letter, capitals included: when the repository was renamed from
+JerrysCars to jerryscars on 2026-11-21, the old page address began answering 404. The "Track cars"
 workflow runs twice a day, on a push to `main`, and by hand from the Actions tab. GitHub Pages is on with
 "GitHub Actions" as its source; a workflow cannot turn that on itself, so a new repository needs it set once
 in Settings, under Pages.
@@ -43,6 +49,18 @@ run log and keeps its last known cars.
 - `area.json`: home point and radius. Memphis, 60 miles.
 - `dealers-seed.json`: hand-kept dealers that OpenStreetMap lacks. Add a line to add a dealer, then run `py discover.py`.
 - `dealers.json`: written by discovery and read by the build. Committed, so the scheduled build does not rediscover.
+- `sources.json`: hand-kept places that are not a dealer's website. `kind` names the reader, `site` the Craigslist city, and `floor` how far the place's listings may thin out between two reads before the read is taken as broken (0.5 for Craigslist, where listings come and go faster than on a lot; 0.8 otherwise).
+
+## Craigslist (seen 2026-11-21, from a home connection)
+
+- `https://memphis.craigslist.org/search/cto` answered the tracker's own name with 120 by-owner results in the page. Each result's address ends in a key that did not change between two reads minutes apart; that key is the listing's id here. Whether it lasts the life of a listing has not been watched yet: if it does not, every listing will look new each day.
+- Each listing's page was read once (120 requests, three seconds apart) and gave a year and a posting time for all 120, and a VIN for 8. Later runs ask only for listings they have not read, so a normal run is one request plus a few.
+- That first build put 101 of the 120 on the page (the rest had no usable price or were pinned outside the radius): 84 with a clean title, 12 rebuilt, 2 with a lien, 2 with no title, 1 for parts. 78 were named to a model the catalogue knows. Only 7 had the three similar cars a judgement needs, because private sellers' cars are older and higher-mileage than what the lots hold; 3 of those sat a tenth or more under.
+- It has not been read from GitHub's servers yet. A refusal there is reported in the run log and costs nothing else.
+- Craigslist's robots.txt allows these pages; its terms of use forbid collecting listings by program without a licence.
+- Make and model are whatever the seller typed, matched to models the catalogue already knows; a make it has never seen, or a model it has never seen, stays unnamed and is not judged. An odometer of 10 to 400 on a car over three years old is read as thousands.
+- Private cars are judged against a catalogue that is almost all dealers, who ask more, so most show as under similar cars. A car pinned more than the radius from the home point is kept in the catalogue and left off the page. A car whose seller says the title is not clean is shown without a judgement.
+- The seller's description and phone number are not kept.
 
 ## How discovery places a dealer
 
@@ -96,8 +114,9 @@ Seen on the build of 2026-11-21 (3,602 cars):
 
 ## Not built yet
 
-- Readers for Craigslist and the city impound auction, and the Facebook extension.
-- Identity from a listing's title, and linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
+- Readers for the city impound auction, government surplus and lenders' repossessions, and the Facebook extension.
+- Craigslist sites beyond Memphis, its by-dealer listings, and reposts of one car under a new listing.
+- Linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
 - A net figure after tax, title and repairs, and how fast each model sells. Price-cut ordering needs a few days of history to mean anything.
 
 Research behind these choices is in `research/`, numbered 01 to 09.

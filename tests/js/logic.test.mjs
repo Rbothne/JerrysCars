@@ -240,3 +240,23 @@ test("one owner only, certified only and history report only each keep the cars 
   assert.deepEqual(ids(visible(list, { certifiedOnly: true })), ["b:2"]);
   assert.deepEqual(ids(visible(list, { historyOnly: true })), ["a:1"]);
 });
+
+test("sold by keeps private sellers' cars, or dealers' cars", () => {
+  const mine = { ...camry, id: "p:1", seller: "private", kind: "private" };
+  const list = [mine, { ...f150, seller: "dealer" }, { ...cruze, seller: "dealer" }];
+  assert.deepEqual(ids(visible(list, { seller: "private" })), ["p:1"]);
+  assert.deepEqual(ids(visible(list, { seller: "dealer" })), ["b:2", "b:3"]);
+  assert.deepEqual(ids(visible(list, { seller: "" })), ["p:1", "b:2", "b:3"]);
+});
+
+test("local lots only keeps private sellers' cars", () => {
+  const mine = { ...camry, id: "p:1", seller: "private", kind: "private" };
+  assert.deepEqual(ids(visible([mine, cruze], { localOnly: true })), ["p:1"]);
+});
+
+test("clean titles only leaves out a car whose seller names another title, and keeps one that says nothing", () => {
+  const rebuilt = { ...camry, id: "p:2", seller: "private", title_status: "rebuilt" };
+  const clean = { ...camry, id: "p:3", seller: "private", title_status: "clean" };
+  assert.deepEqual(ids(visible([rebuilt, clean, f150], { cleanOnly: true })), ["p:3", "b:2"]);
+  assert.deepEqual(ids(visible([rebuilt, clean, f150], {})), ["p:2", "p:3", "b:2"]);
+});

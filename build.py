@@ -1,9 +1,10 @@
-"""Read every dealer that has a reader, update the catalogue, and write the page's data.
+"""Read every dealer and every other source that has a reader, update the catalogue, and write the page's data.
 
     py build.py
 
-Reads dealers.json (from discover.py). Updates data/catalogue.db and writes site/data/cars.json.
-A dealer whose read fails keeps what the catalogue already knew about it; the others carry on."""
+Reads dealers.json (from discover.py) and sources.json (hand-kept: the places that are not a dealer's own
+website). Updates data/catalogue.db and writes site/data/cars.json. A dealer or source whose read fails keeps
+what the catalogue already knew about it; the others carry on."""
 
 import datetime
 import json
@@ -11,37 +12,58 @@ import pathlib
 import re
 import sys
 
-from cartrack import catalogue, cost, fetch, value, vin
+from cartrack import catalogue, cost, fetch, identify, value, vin
+from cartrack.dealers import miles_between
 from cartrack.listings import num
 from cartrack.readers import READERS
+from cartrack.sources import SOURCES
 
 ROOT = pathlib.Path(__file__).parent
 ONLINE = {"carvana"}                              # platforms that deliver a car instead of keeping a lot to visit
 
 
+def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
+    """Run one read and record what it found under `source`. Returns the report line for it."""
+    line = {"dealer": key, "platform": platform, "ok": False, "read": 0, "new": 0, "gone": 0, "complete": None,
+            "error": None}
+    try:
+        found, complete = read()
+        outcomes = [catalogue.record(db, listing) for listing in found]
+        line.update(read=len(found), new=outcomes.count("new"), complete=complete)
+        if complete:
+            line["gone"] = catalogue.close_out(db, source, [listing["id"] for listing in found], now, floor)
+        line["ok"] = True
+    except Exception as error:                    # one source's trouble is reported, never the run's
+        line["error"] = f"{type(error).__name__}: {error}"
+    say(f"{key:<34} {platform:<16} "
+        + (f"{line['read']:4d} read {line['new']:4d} new {line['gone']:3d} gone"
+           + ("" if line["complete"] else "  (partial)") if line["ok"] else f"FAILED {line['error']}"))
+    return line
+
+
 def read_dealers(db, dealers, readers, get, now, say=print):
     """Read each dealer whose platform has a reader and record what it lists. Returns one report line a dealer.
     Cars missing from a read are marked gone only when the reader saw the dealer's whole inventory."""
+    return [_keep(db, dealer["key"], dealer["platform"], dealer["host"],
+                  lambda: readers[dealer["platform"]](dealer, get, now), now, say)
+            for dealer in dealers if dealer.get("platform") in readers and dealer.get("host")]
+
+
+def read_sources(db, places, readers, get, now, say=print):
+    """Read each place in sources.json whose kind has a reader, and report it the way a dealer is reported.
+    The reader is told which of the place's listings the catalogue already holds in full (the ones with a
+    posted time, which only a listing's own page gives), so it asks for each listing's page once. A place
+    may set its own `floor`: classifieds turn over faster than a dealer's lot."""
     report = []
-    for dealer in dealers:
-        read = readers.get(dealer.get("platform"))
-        if not (read and dealer.get("host")):
+    for place in places:
+        read = readers.get(place.get("kind"))
+        if not read:
             continue
-        line = {"dealer": dealer["key"], "platform": dealer["platform"], "ok": False, "read": 0, "new": 0,
-                "gone": 0, "complete": None, "error": None}
-        report.append(line)
-        try:
-            found, complete = read(dealer, get, now)
-            outcomes = [catalogue.record(db, listing) for listing in found]
-            line.update(read=len(found), new=outcomes.count("new"), complete=complete)
-            if complete:
-                line["gone"] = catalogue.close_out(db, dealer["host"], [listing["id"] for listing in found], now)
-            line["ok"] = True
-        except Exception as error:                # one dealer's trouble is reported, never the run's
-            line["error"] = f"{type(error).__name__}: {error}"
-        say(f"{dealer['key']:<34} {line['platform']:<16} "
-            + (f"{line['read']:4d} read {line['new']:4d} new {line['gone']:3d} gone"
-               + ("" if line["complete"] else "  (partial)") if line["ok"] else f"FAILED {line['error']}"))
+        known = {row[0] for row in db.execute(
+            "SELECT source_id FROM listing WHERE source = ? AND posted IS NOT NULL", (place["key"],))}
+        report.append(_keep(db, place["key"], place["kind"], place["key"],
+                            lambda: read(place, get, now, known=known), now, say,
+                            place.get("floor", catalogue.FLOOR)))
     return report
 
 
@@ -108,14 +130,28 @@ def _engine(decoded):
             "litres": _number(decoded.get("DisplacementL")), "weight_class": weight.group(1) if weight else None}
 
 
-def page_data(db, dealers, now, report=None, judge=value.judge):
+def _away(row, dealer, area):
+    """(miles from the home point, whether that came from the listing's own pin and not a dealer's lot)."""
+    if dealer.get("miles") is not None:
+        return dealer["miles"], False
+    if area and row["lat"] is not None and row["lon"] is not None:
+        return round(miles_between(area["home"], (row["lat"], row["lon"])), 1), True
+    return None, False
+
+
+def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=None):
     """What the page shows: every live car with a price, how long it has been for sale, and what its price
     has done. `price` includes the dealer's stated fees. `was` and `drop` compare today's price with the first
     one the tracker saw. A car listed in
     several places is shown once, at its lowest price, with `places` saying how many. `typical` is what cars
     like it ask and `similar` how many that rests on (cartrack/value.py); both are None for a car not judged.
-    `total` adds the dealer's stated fees and Tennessee sales tax; `per_year` is miles for each year on the road."""
-    by_key = {dealer["key"]: dealer for dealer in dealers}
+    `total` adds the dealer's stated fees and Tennessee sales tax; `per_year` is miles for each year on the road.
+
+    `places` are the rows of sources.json and `area` the home point and radius. A car from a place carries
+    `seller` ("private"), `where` (the seller's word for the neighbourhood, else the city) and its distance
+    from its own map pin; one pinned outside the radius is left off. `title_status` is what the seller says
+    of the title. A car whose title is not clean is shown but not judged, and is not used to judge others."""
+    by_key = {dealer["key"]: dealer for dealer in (*dealers, *places)}
     decodes = {vin: json.loads(row) for vin, row in db.execute("SELECT vin, row_json FROM vin_decode")}
     vehicles = {}                                 # one physical car -> the listings of it; a group lists a car on each of its sites
     for row in db.execute("SELECT * FROM listing WHERE gone IS NULL AND price IS NOT NULL ORDER BY id").fetchall():
@@ -124,6 +160,10 @@ def page_data(db, dealers, now, report=None, judge=value.judge):
         first = points[0] if points else row["price"]
         drop = max(first - row["price"], 0)
         dealer = by_key.get(row["source"], {})
+        away, pinned = _away(row, dealer, area)
+        if pinned and away > area["radius_miles"]:
+            continue
+        on_lot = row["channel"] == "dealer_site"
         photos = json.loads(row["photos"] or "[]")
         extra = json.loads(row["extra"] or "{}")
         years = max(int(now[:4]) - row["year"] + 1, 1) if row["year"] else None
@@ -139,9 +179,12 @@ def page_data(db, dealers, now, report=None, judge=value.judge):
             "per_year": row["miles"] // years if years and row["miles"] is not None else None,
             **money, **_past(extra),
             "fuel": _fuel(row["fuel"], decodes.get(row["vin"], {})),
-            "kind": "online" if dealer.get("platform") in ONLINE else "lot",
+            "kind": "online" if dealer.get("platform") in ONLINE else "private" if row["seller_type"] == "private" else "lot",
+            "seller": row["seller_type"] or ("dealer" if on_lot else None),
+            "title_status": row["title_status"],
+            "where": None if on_lot else extra.get("where") or row["city"],
             "dealer": row["seller_name"] if not dealer else dealer.get("name"), "dealer_key": row["source"],
-            "dealer_miles": dealer.get("miles"), "city": row["city"], "state": row["state"],
+            "dealer_miles": away, "city": row["city"], "state": row["state"],
             "photo": photos[0] if photos else None,
         })
     cars = sorted(({**min(listed, key=lambda car: car["price"]), "places": len(listed)} for listed in vehicles.values()),
@@ -153,9 +196,11 @@ def page_data(db, dealers, now, report=None, judge=value.judge):
         if len(lot) > 1 and all(car["certified"] is True for car in lot):
             for car in lot:
                 car["certified"] = None
-    judged = judge([{**car, **_engine(decodes.get(car["vin"], {}))} for car in cars], int(now[:4]))
+    sound = {car["id"] for car in cars if car["title_status"] in (None, "clean")}
+    judged = judge([{**car, **_engine(decodes.get(car["vin"], {}))} for car in cars if car["id"] in sound], int(now[:4]))
     for car in cars:
-        car["typical"], car["similar"] = (judged.get(car["id"], {}).get(name) for name in ("typical", "similar"))
+        fair = judged.get(car["id"], {}) if car["id"] in sound else {}
+        car["typical"], car["similar"] = (fair.get(name) for name in ("typical", "similar"))
     counts = {}
     for car in cars:
         counts[car["dealer_key"]] = counts.get(car["dealer_key"], 0) + 1
@@ -170,23 +215,26 @@ def page_data(db, dealers, now, report=None, judge=value.judge):
 def main():
     now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M")
     found = json.loads((ROOT / "dealers.json").read_text(encoding="utf-8"))
+    places = json.loads((ROOT / "sources.json").read_text(encoding="utf-8"))
     (ROOT / "data").mkdir(exist_ok=True)
     db = catalogue.open_catalogue(ROOT / "data" / "catalogue.db")
 
-    report = read_dealers(db, found["dealers"], READERS, fetch.paced(), now)
+    get = fetch.paced()
+    report = read_sources(db, places, SOURCES, get, now) + read_dealers(db, found["dealers"], READERS, get, now)
     try:
         print(f"{decode_vins(db, vin.decode, now)} VINs decoded")
     except Exception as error:                    # vPIC being down must not cost the run its listings
         print(f"VIN decoding skipped: {type(error).__name__}: {error}")
+    print(f"{identify.fill(db)} listings named from their sellers' words")
 
-    data = page_data(db, found["dealers"], now, report)
+    data = page_data(db, found["dealers"], now, report, places=places, area=found["area"])
     data["area"] = found["area"]
     db.close()
     (ROOT / "site" / "data").mkdir(parents=True, exist_ok=True)
     (ROOT / "site" / "data" / "cars.json").write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")
-    print(f"{len(data['cars'])} cars on the page from {sum(1 for line in report if line['ok'])} of {len(report)} dealers")
+    print(f"{len(data['cars'])} cars on the page from {sum(1 for line in report if line['ok'])} of {len(report)} sources")
     if report and not any(line["ok"] for line in report):
-        sys.exit("every dealer failed")
+        sys.exit("every source failed")
 
 
 if __name__ == "__main__":

@@ -36,6 +36,8 @@ function models() {
 }
 
 const web = (address) => (/^https?:\/\//.test(address || "") ? address : null);
+const TITLES = { rebuilt: "Rebuilt title", salvage: "Salvage title", lien: "Lien on the title", missing: "No title",
+  parts_only: "Parts only", lemon: "Lemon title" };
 
 function card(car) {
   const item = make("li", "car");
@@ -47,8 +49,10 @@ function card(car) {
   if (web(car.url)) Object.assign(link, { href: car.url, rel: "noopener noreferrer", target: "_blank" });
   heading.append(link);
   body.append(heading, make("div", "price", dollars.format(car.price)));
-  const fee = car.fees ? `includes ${dollars.format(car.fees)} dealer fee` : "dealer fee not stated";
+  const fee = car.seller === "private" ? "private sale, no dealer fee"
+    : car.fees ? `includes ${dollars.format(car.fees)} dealer fee` : "dealer fee not stated";
   body.append(make("p", "total", car.total ? `${fee} · about ${dollars.format(car.total)} with tax` : fee));
+  if (TITLES[car.title_status]) body.append(make("div", "branded", `${TITLES[car.title_status]}, the seller says`));
   const below = under(car);
   if (below && below.share >= NOTABLE) {
     const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);
@@ -74,7 +78,8 @@ function card(car) {
   body.append(make("p", "facts", `${miles}${yearly}${economy} · listed ${car.days} day${car.days === 1 ? "" : "s"}`));
   const away = car.dealer_miles == null ? "" : ` · ${Math.round(car.dealer_miles)} mi away`;
   const also = car.places > 1 ? ` · on ${car.places} sites` : "";
-  body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${away}${also}`));
+  const where = car.where ? ` · ${car.where}` : "";
+  body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${where}${away}${also}`));
   if (car.vin) body.append(make("p", "vin", car.vin));
   const checks = make("p", "checks");
   const outside = (text, href) => Object.assign(make("a", "", text), { href, rel: "noopener noreferrer", target: "_blank" });
@@ -100,6 +105,8 @@ function filters() {
     drive: data.get("drive"),
     fuel: data.get("fuel"),
     dealer: data.get("dealer"),
+    seller: data.get("seller"),
+    cleanOnly: data.get("cleanOnly") === "on",
     localOnly: data.get("localOnly") === "on",
     droppedOnly: data.get("droppedOnly") === "on",
     underOnly: data.get("underOnly") === "on",
@@ -140,7 +147,8 @@ try {
   const read = data.dealers.filter((dealer) => dealer.ok).length;
   const built = new Date(`${data.built}:00Z`).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
   document.getElementById("built").textContent =
-    `${whole.format(cars.length)} cars from ${read} of ${data.dealers.length} dealers near ${data.area.name}. Last read ${built}.`;
+    `${whole.format(cars.length)} cars from ${read} of ${data.dealers.length} sources near ${data.area.name}, `
+    + `${whole.format(cars.filter((car) => car.seller === "private").length)} of them from private sellers. Last read ${built}.`;
   draw();
 } catch (error) {
   document.getElementById("built").textContent = `The car list could not be loaded (${error.message}).`;

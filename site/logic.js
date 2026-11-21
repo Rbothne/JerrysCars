@@ -89,8 +89,9 @@ function sought(text, cars) {
 }
 
 /** The cars that pass every filter set in `filters`: text, make, model, minPrice, maxPrice, minYear, maxYear,
- *  maxMiles, body, drive ("four" or "two"), fuel, dealer, localOnly, droppedOnly, underOnly, oneOwnerOnly,
- *  certifiedOnly, historyOnly. */
+ *  maxMiles, body, drive ("four" or "two"), fuel, dealer, seller ("private" or "dealer"), localOnly, droppedOnly,
+ *  underOnly, oneOwnerOnly, certifiedOnly, historyOnly, cleanOnly (hides a car whose seller names a title that
+ *  is not clean; a car that says nothing of its title stays). */
 export function visible(cars, filters) {
   const words = sought(filters.text, cars);
   return cars.filter((car) => {
@@ -106,6 +107,8 @@ export function visible(cars, filters) {
     if (filters.drive && !(DRIVES[filters.drive] || []).includes(car.drive)) return false;
     if (filters.fuel && car.fuel !== filters.fuel) return false;
     if (filters.dealer && car.dealer_key !== filters.dealer) return false;
+    if (filters.seller && car.seller !== filters.seller) return false;
+    if (filters.cleanOnly && car.title_status && car.title_status !== "clean") return false;
     if (filters.localOnly && car.kind === "online") return false;
     if (filters.droppedOnly && !car.drop) return false;
     if (filters.underOnly && !((under(car) || {}).share >= NOTABLE)) return false;

@@ -77,6 +77,87 @@ class ReadDealers(unittest.TestCase):
                          {"dealer": "peckdaniel.com", "ok": True, "read": 2, "new": 2, "gone": 0})
 
 
+CRAIGSLIST = {"key": "memphis.craigslist.org", "kind": "craigslist", "site": "memphis", "name": "Craigslist, by owner"}
+AREA = {"name": "Memphis, TN", "home": [35.1495, -90.0490], "radius_miles": 60}
+
+
+def private(source_id, seen=NOW, **fields):
+    return make_listing("memphis.craigslist.org", source_id, **{
+        "url": f"https://www.craigslist.org/view/d/a-car/{source_id}", "title": "2012 toyota camry le", "seen": seen,
+        "channel": "classified", "seller_type": "private", "price": 5200, **fields})
+
+
+def detailed(source_id, seen=NOW, **fields):
+    return private(source_id, seen, **{"posted": "2026-11-20T15:00", "year": 2012, "miles": 140000,
+                                       "title_status": "clean", "extra": {"makemodel": "toyota camry le"}, **fields})
+
+
+class ReadSources(unittest.TestCase):
+    def setUp(self):
+        self.db = catalogue.open_catalogue(":memory:")
+        self.addCleanup(self.db.close)
+        self.known = []
+
+    def source(self, *listings, complete=True):
+        def read(place, get, seen, known=()):
+            self.known.append(set(known))
+            return [dict(listing, seen=seen) for listing in listings], complete
+        return {"craigslist": read}
+
+    def run_build(self, readers, now=NOW, places=(CRAIGSLIST,)):
+        return build.read_sources(self.db, places, readers, get=None, now=now, say=lambda line: None)
+
+    def live(self):
+        return [row[0] for row in self.db.execute("SELECT id FROM listing WHERE gone IS NULL ORDER BY id")]
+
+    def test_each_place_is_read_by_its_kinds_reader_and_reported_like_a_dealer(self):
+        report = self.run_build(self.source(detailed("a"), detailed("b")))
+        self.assertEqual(self.live(), ["memphis.craigslist.org:a", "memphis.craigslist.org:b"])
+        self.assertEqual({name: report[0][name] for name in ("dealer", "platform", "ok", "read", "new", "gone", "complete")},
+                         {"dealer": "memphis.craigslist.org", "platform": "craigslist", "ok": True, "read": 2, "new": 2,
+                          "gone": 0, "complete": True})
+
+    def test_the_reader_is_told_which_listings_the_catalogue_already_has_in_full(self):
+        self.run_build(self.source(detailed("a"), private("b")))            # b's own page could not be had
+        self.run_build(self.source(private("a"), private("b")), now="2026-11-22T05:00")
+        self.assertEqual(self.known, [set(), {"a"}])
+
+    def test_a_later_read_of_the_list_alone_keeps_what_the_listings_page_gave(self):
+        self.run_build(self.source(detailed("a")))
+        self.run_build(self.source(private("a", price=4800)), now="2026-11-22T05:00")
+        row = self.db.execute("SELECT price, year, miles, posted, title_status FROM listing").fetchone()
+        self.assertEqual(row[:], (4800, 2012, 140000, "2026-11-20T15:00", "clean"))
+
+    def test_a_listing_missing_from_a_whole_read_is_gone_and_from_a_partial_one_is_not(self):
+        five = [detailed(name) for name in "abcde"]
+        self.run_build(self.source(*five))
+        self.run_build(self.source(*five[:4], complete=False), now="2026-11-22T05:00")
+        self.assertEqual(len(self.live()), 5)
+        report = self.run_build(self.source(*five[:4]), now="2026-11-23T05:00")
+        self.assertEqual((len(self.live()), report[0]["gone"]), (4, 1))
+
+    def test_a_place_whose_read_fails_is_reported_and_keeps_its_listings(self):
+        self.run_build(self.source(detailed("a")))
+
+        def broken(place, get, seen, known=()):
+            raise readers.NotRead("no results")
+        report = self.run_build({"craigslist": broken}, now="2026-11-22T05:00")
+        self.assertEqual(self.live(), ["memphis.craigslist.org:a"])
+        self.assertEqual((report[0]["ok"], report[0]["error"]), (False, "NotRead: no results"))
+
+    def test_a_place_may_say_how_far_its_listings_can_thin_out_between_reads(self):
+        ten = [detailed(name) for name in "abcdefghij"]
+        self.run_build(self.source(*ten))
+        report = self.run_build(self.source(*ten[:6]), now="2026-11-22T05:00")      # 60% left: under the usual 80%
+        self.assertEqual((report[0]["ok"], len(self.live())), (False, 10))
+        quick = {**CRAIGSLIST, "floor": 0.5}
+        report = self.run_build(self.source(*ten[:6]), now="2026-11-23T05:00", places=(quick,))
+        self.assertEqual((report[0]["ok"], report[0]["gone"], len(self.live())), (True, 4, 6))
+
+    def test_a_place_of_a_kind_with_no_reader_is_left_alone(self):
+        self.assertEqual(self.run_build({}), [])
+
+
 class DecodeVins(unittest.TestCase):
     def test_only_vins_not_decoded_before_are_sent(self):
         db = catalogue.open_catalogue(":memory:")
@@ -264,6 +345,56 @@ class PageData(unittest.TestCase):
     def test_a_history_address_that_is_not_carfaxs_is_not_passed_on(self):
         catalogue.record(self.db, car("peckdaniel.com", "1", extra={"history_url": "javascript:alert(1)"}))
         self.assertIsNone(self.cars()[0]["history"])
+
+    def shown(self, judge=None, now=NOW):
+        return build.page_data(self.db, [PECK], now, places=[CRAIGSLIST], area=AREA,
+                               **({"judge": judge} if judge else {}))["cars"]
+
+    def test_a_private_sellers_car_says_so_and_where_it_is(self):
+        catalogue.record(self.db, detailed("a", make="toyota", model="Camry", lat=35.0312, lon=-89.8124, geo_how="pin",
+                                           city="Memphis", state="TN", extra={"where": "EAST MEMPHIS"}))
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        mine, lot = self.shown()
+        self.assertEqual((mine["seller"], mine["dealer"], mine["dealer_key"], mine["where"], mine["kind"]),
+                         ("private", "Craigslist, by owner", "memphis.craigslist.org", "EAST MEMPHIS", "private"))
+        self.assertEqual(mine["dealer_miles"], 15.7)                        # from the listing's own map pin
+        self.assertEqual((mine["fees"], mine["price"], mine["title_status"]), (None, 5200, "clean"))
+        self.assertEqual((lot["seller"], lot["where"], lot["title_status"]), ("dealer", None, None))
+
+    def test_a_private_car_with_no_neighbourhood_is_placed_by_its_city(self):
+        catalogue.record(self.db, detailed("a", city="Cordova", state="TN"))
+        self.assertEqual(self.shown()[0]["where"], "Cordova")
+
+    def test_a_private_car_pinned_outside_the_area_is_left_off_the_page(self):
+        catalogue.record(self.db, detailed("near", lat=35.0312, lon=-89.8124))
+        catalogue.record(self.db, detailed("far", lat=33.5162, lon=-90.1795))          # Greenwood, Mississippi
+        catalogue.record(self.db, detailed("unpinned"))
+        self.assertEqual([one["id"] for one in self.shown()], ["memphis.craigslist.org:near", "memphis.craigslist.org:unpinned"])
+
+    def test_days_listed_counts_from_when_the_seller_posted(self):
+        catalogue.record(self.db, detailed("a", "2026-11-21T05:00", posted="2026-11-18T23:30"))
+        self.assertEqual(self.shown(now="2026-11-25T05:00")[0]["days"], 7)
+
+    def test_a_car_whose_title_is_not_clean_is_shown_but_not_judged_or_used_to_judge(self):
+        catalogue.record(self.db, detailed("clean"))
+        catalogue.record(self.db, detailed("rebuilt", title_status="rebuilt"))
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        given = []
+        shown = self.shown(judge=lambda cars, year: given.extend(car["id"] for car in cars) or {
+            "memphis.craigslist.org:rebuilt": {"typical": 9000, "similar": 4}})
+        self.assertEqual(given, ["memphis.craigslist.org:clean", "peckdaniel.com:1"])
+        self.assertEqual([(one["id"], one["title_status"], one["typical"]) for one in shown],
+                         [("memphis.craigslist.org:clean", "clean", None), ("memphis.craigslist.org:rebuilt", "rebuilt", None),
+                          ("peckdaniel.com:1", None, None)])
+
+    def test_the_page_lists_the_places_read_beside_the_dealers(self):
+        catalogue.record(self.db, detailed("a"))
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        data = build.page_data(self.db, [PECK], NOW, places=[CRAIGSLIST], area=AREA, report=[
+            {"dealer": "peckdaniel.com", "ok": True}, {"dealer": "memphis.craigslist.org", "ok": True}])
+        self.assertEqual(data["dealers"], [
+            {"key": "peckdaniel.com", "name": "Peck Daniel Auto Sales", "cars": 1, "ok": True},
+            {"key": "memphis.craigslist.org", "name": "Craigslist, by owner", "cars": 1, "ok": True}])
 
     def test_the_page_says_when_it_was_built_and_what_was_read(self):
         catalogue.record(self.db, car("peckdaniel.com", "1"))
