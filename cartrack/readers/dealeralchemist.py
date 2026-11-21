@@ -12,7 +12,7 @@ import datetime
 import json
 import re
 
-from . import NotRead, dealer_listing, drive, site
+from . import NotRead, dealer_listing, drive, history, site
 from ..listings import num
 
 PAGE = 250                 # the most Typesense gives in one page
@@ -41,6 +41,8 @@ def _listing(dealer, base, car, seen):
     shown = num(car.get("finalPriceInt") or car.get("finalPrice"))
     fees = {fee.get("name"): fee.get("amount") for fee in car.get("dealerFees") or [] if not fee.get("isDiscount")}
     lot = car.get("dealer") or {}
+    carfax = car.get("carfax") or {}
+    mpg = [num(car.get("mpgCity")), num(car.get("mpgHway"))]
     return dealer_listing(
         dealer, car.get("vin") or car.get("stockNumber"), seen,
         url=base + car["vdpUrl"] if (car.get("vdpUrl") or "").startswith("/") else car.get("vdpUrl"),
@@ -52,7 +54,9 @@ def _listing(dealer, base, car, seen):
         fuel=car.get("fuel"), transmission=car.get("transmission"), miles=car.get("mileage"),
         color=car.get("exteriorColor"), photos=car.get("imageUrls") or [], photo_count=len(car.get("imageUrls") or []),
         extra={"stock": car.get("stockNumber"), "shown_price": int(shown) if shown else None, "fees": fees,
-               "lot": lot.get("name") or car.get("dealerName"), "certified": car.get("certified")})
+               "lot": lot.get("name") or car.get("dealerName"), "certified": car.get("certified"),
+               "mpg": [int(figure) for figure in mpg] if all(mpg) else None,
+               **history(f"{carfax.get('url') or ''} {carfax.get('iconUrl') or ''}")})
 
 
 def read(dealer, get, seen):

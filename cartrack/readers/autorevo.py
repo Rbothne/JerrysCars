@@ -6,7 +6,7 @@ peckdaniel.com, 2026-11-20, where the page held all 25 cars the sitemap listed."
 
 import re
 
-from . import NotRead, dealer_listing, drive, site, text
+from . import NotRead, dealer_listing, drive, history, site, text
 
 _CARD = '<section class="inventory_item'
 
@@ -28,7 +28,7 @@ def _listing(dealer, base, card, seen):
         vin=facts.get("vin"), year=named.get("year"), make=named.get("make"), model=named.get("model"),
         trim=named.get("trim"), drive=drive(facts.get("drivetrain")), engine=facts.get("engine"),
         transmission=facts.get("transmission"), miles=facts.get("mileage"), color=facts.get("exterior"),
-        photos=[photo.group(1)] if photo else [])
+        photos=[photo.group(1)] if photo else [], extra=history(card))
 
 
 def read(dealer, get, seen):

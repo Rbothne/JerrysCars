@@ -134,6 +134,13 @@ class Carvana(unittest.TestCase):
         with self.assertRaises(NotRead):
             self.read({1: {"error": {"code": "UnsupportedApiVersion"}}})
 
+class Warranty(unittest.TestCase):
+    def test_keeps_what_is_left_of_the_makers_warranty(self):
+        found, _ = carvana.read(DEALER, Site(None), SEEN)
+        left = [car["extra"].get("warranty") for car in found]
+        self.assertIn({"basic": [15, 24500], "drivetrain": [39, 48500]}, left)
+        self.assertIsNone(left[0])                       # the 2010 car has none left
+
 
 if __name__ == "__main__":
     unittest.main()

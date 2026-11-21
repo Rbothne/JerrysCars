@@ -10,7 +10,7 @@ have more behind it; reading a second page has not been tried, so that read is r
 import html
 import re
 
-from . import NotRead, dealer_listing, drive, site, text
+from . import NotRead, dealer_listing, drive, history, site, text
 from ..listings import num
 
 PAGE = 100
@@ -36,7 +36,7 @@ def _listing(dealer, base, card, seen):
     price = re.search(r"""class=['"]price-2['"]>([^<]*)""", card)          # the box labelled "Retail Price"
     bare = re.search(r'class="lblPrice[^"]*">([^<]*)', card)                # a figure with no label at all
     photo = re.search(_PHOTO, card)
-    extra = {"stock": facts.get("stock")}
+    extra = {"stock": facts.get("stock"), **history(card)}
     if bare and not price and num(bare.group(1)) is not None:
         extra["unlabelled_price"] = int(num(bare.group(1)))    # seen to be a down payment, so not the asking price
     return dealer_listing(

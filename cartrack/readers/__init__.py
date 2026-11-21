@@ -39,6 +39,28 @@ def drive(value):
     return next((word for needle, word in _DRIVES if needle in value), None)
 
 
+_REPORT = re.compile(r"""https:(?:\\?/){2}www\.carfax\.com\\?/(?:vehiclehistory|cfm)\\?/[^"'\s<>]+""")
+_BADGE = re.compile(r"valuebadge\\?/([a-z0-9_]+)\.svg")
+
+
+def history(fragment):
+    """What a card says of the car's past: the address of the free Carfax report the dealer links, and what
+    Carfax's own badge beside it claims ("1own": one owner; "great", "good", "fair": its view of the price).
+    The plain "show me" badge claims nothing. Only what is there is given back."""
+    found = {}
+    report = _REPORT.search(fragment or "")
+    if report:
+        found["history_url"] = html.unescape(report.group().replace("\\/", "/"))
+    badge = _BADGE.search(fragment or "")
+    if badge:
+        if badge.group(1).startswith("1own"):
+            found["one_owner"] = True
+        worth = next((word for word in ("great", "good", "fair") if badge.group(1).endswith(word)), None)
+        if worth:
+            found["carfax_value"] = worth
+    return found
+
+
 def dealer_listing(dealer, source_id, seen, **fields):
     """make_listing for a car on a dealer's own site: the dealer is the source, the seller and the place."""
     return make_listing(

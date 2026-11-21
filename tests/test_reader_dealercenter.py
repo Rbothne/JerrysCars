@@ -103,6 +103,14 @@ class DealerCenter(unittest.TestCase):
         with self.assertRaises(readers.NotRead):
             self.read(answers(pages=()))
 
+class Past(unittest.TestCase):
+    def test_keeps_the_history_report_and_carfaxs_badge(self):
+        found, _ = dealercenter.read(DealerCenter.DEALER, answers(), SEEN)
+        extras = [car["extra"] for car in found]
+        self.assertIn("https://www.carfax.com/vehiclehistory/ar20/GsjUE-wRppZNNe2cJJ9dj0FhQJAgUwztAL8KEkOfErfhibX449dcb5hPnDQyxiVs2"
+                      "CvIKiqXki3tqWfnaZqFrFJTZCR9yjSOyPc", [extra.get("history_url") for extra in extras])
+        self.assertIn((True, "good"), [(extra.get("one_owner"), extra.get("carfax_value")) for extra in extras])
+
 
 if __name__ == "__main__":
     unittest.main()

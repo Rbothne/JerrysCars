@@ -198,6 +198,48 @@ class PageData(unittest.TestCase):
                          {"id": "jimkerasnissan.com:9", "price": 6200, "year": 2012, "make": "toyota", "model": "Camry",
                           "miles": 134200, "series": "LE", "cylinders": 4.0, "litres": 2.5, "weight_class": "1"})
 
+    def test_miles_a_year_counts_the_model_year_as_the_first(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", year=2012, miles=134200))      # 15 years on the road in 2026
+        catalogue.record(self.db, car("peckdaniel.com", "2", year=2026, miles=9000))
+        catalogue.record(self.db, car("peckdaniel.com", "3", year=2027, miles=40))
+        self.assertEqual([one["per_year"] for one in self.cars()], [8946, 9000, 40])
+
+    def test_the_total_adds_the_dealers_fees_and_tennessee_tax_on_both(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", price=10000, extra={"fees": {"Dealer Doc Fee": 899}}))
+        shown = self.cars()[0]
+        self.assertEqual((shown["fees"], shown["tax"], shown["total"]), (899, 851, 11750))
+
+    def test_a_car_whose_dealer_states_no_fee_is_totalled_with_tax_alone(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", price=10000))
+        shown = self.cars()[0]
+        self.assertEqual((shown["fees"], shown["tax"], shown["total"]), (None, 788, 10788))
+
+    def test_a_car_carries_what_its_listing_says_of_its_past(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", extra={
+            "history_url": "https://www.carfax.com/vehiclehistory/ar20/abc", "one_owner": True, "carfax_value": "good",
+            "certified": True, "mpg": [25, 34], "warranty": {"basic": [15, 24500]}, "reservable": True}))
+        catalogue.record(self.db, car("peckdaniel.com", "2"))
+        first, second = self.cars()
+        self.assertEqual({name: first[name] for name in ("history", "one_owner", "carfax_value", "certified", "mpg", "warranty", "waiting")},
+                         {"history": "https://www.carfax.com/vehiclehistory/ar20/abc", "one_owner": True, "carfax_value": "good",
+                          "certified": True, "mpg": [25, 34], "warranty": {"basic": [15, 24500]}, "waiting": True})
+        self.assertEqual({name: second[name] for name in ("history", "one_owner", "carfax_value", "certified", "mpg", "warranty", "waiting")},
+                         {"history": None, "one_owner": None, "carfax_value": None, "certified": None, "mpg": None,
+                          "warranty": None, "waiting": False})
+
+    def test_a_dealer_that_calls_every_car_certified_is_saying_nothing(self):
+        # City Auto's feed marks all 447 of its used cars certified; Gossett's marks 72 of 324
+        for n in range(6):
+            catalogue.record(self.db, car("peckdaniel.com", str(n), extra={"certified": True}))
+            catalogue.record(self.db, car("jimkerasnissan.com", str(n), extra={"certified": n < 2}))
+        shown = {one["id"]: one["certified"] for one in self.cars()}
+        self.assertEqual([shown[f"peckdaniel.com:{n}"] for n in range(6)], [None] * 6)
+        self.assertEqual([shown[f"jimkerasnissan.com:{n}"] for n in range(6)], [True, True, False, False, False, False])
+
+    def test_a_history_address_that_is_not_carfaxs_is_not_passed_on(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", extra={"history_url": "javascript:alert(1)"}))
+        self.assertIsNone(self.cars()[0]["history"])
+
     def test_the_page_says_when_it_was_built_and_what_was_read(self):
         catalogue.record(self.db, car("peckdaniel.com", "1"))
         data = build.page_data(self.db, [PECK, KERAS], NOW, report=[{"dealer": "peckdaniel.com", "ok": True, "read": 1}])

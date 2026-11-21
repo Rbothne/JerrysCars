@@ -29,6 +29,30 @@ class Common(unittest.TestCase):
     def test_site_without_a_website_guesses_www(self):
         self.assertEqual(readers.site({"host": "901scm.com", "website": None}), "https://www.901scm.com")
 
+    def test_history_finds_the_free_report_and_what_carfaxs_badge_says(self):
+        card = ('<a href="https://www.carfax.com/vehiclehistory/ar20/abc_DEF-1" target="_blank">'
+                '<img src="https://partnerstatic.carfax.com/img/valuebadge/1own_good.svg"></a>')
+        self.assertEqual(readers.history(card), {"history_url": "https://www.carfax.com/vehiclehistory/ar20/abc_DEF-1",
+                                                 "one_owner": True, "carfax_value": "good"})
+
+    def test_history_reads_a_value_badge_that_claims_no_single_owner(self):
+        card = '<img src="https://partnerstatic.carfax.com/img/valuebadge/great.svg">'
+        self.assertEqual(readers.history(card), {"carfax_value": "great"})
+
+    def test_history_with_only_the_show_me_badge_gives_just_the_report(self):
+        card = ('<a href="https://www.carfax.com/vehiclehistory/ar20/abc"><img src="https://partnerstatic.carfax.com'
+                '/img/valuebadge/showme.svg"></a>')
+        self.assertEqual(readers.history(card), {"history_url": "https://www.carfax.com/vehiclehistory/ar20/abc"})
+
+    def test_history_reads_addresses_escaped_for_json_or_html(self):
+        self.assertEqual(readers.history('"link":"https:\\/\\/www.carfax.com\\/vehiclehistory\\/ar20\\/abc"'),
+                         {"history_url": "https://www.carfax.com/vehiclehistory/ar20/abc"})
+        self.assertEqual(readers.history('<a href="https://www.carfax.com/cfm/check_order.cfm?partner=DCS_2&amp;vin=X1">'),
+                         {"history_url": "https://www.carfax.com/cfm/check_order.cfm?partner=DCS_2&vin=X1"})
+
+    def test_history_of_a_card_that_says_nothing_is_empty(self):
+        self.assertEqual(readers.history('<img src="https://images.example/car.jpg">'), {})
+
     def test_every_reader_is_registered_under_its_platform(self):
         self.assertEqual(set(readers.READERS), {"dealeron", "autorevo", "dealercarsearch", "teamvelocity", "dealerfire",
                                                 "dealeralchemist", "dealercenter", "carsforsale", "carvana"})
@@ -144,6 +168,22 @@ class AutoRevo(unittest.TestCase):
             self.read({self.INVENTORY: b"<html>maintenance</html>", self.SITEMAP: "autorevo_sitemap.xml"})
 
 
+class Pasts(unittest.TestCase):
+    """What the first three readers keep beyond the car itself."""
+
+    def test_autorevo_keeps_the_history_report_and_carfaxs_view_of_the_price(self):
+        get = pages({AutoRevo.INVENTORY: "autorevo_inventory.html", AutoRevo.SITEMAP: "autorevo_sitemap.xml"})
+        mdx = autorevo.read(AutoRevo.DEALER, get, SEEN)[0][0]
+        self.assertEqual(mdx["extra"]["history_url"], "https://www.carfax.com/vehiclehistory/ar20/46BrNKWJFo3Fg7X0DoSZAVnEx08"
+                         "TzYgNK7ZVjVPr9eI_kndbScU87UmCuz_WgTWB9GDkufsUFkB9SnfRohx61rk-9PasG9yXN64")
+        self.assertEqual(mdx["extra"]["carfax_value"], "good")
+
+    def test_dealeron_names_the_document_fee_as_a_fee(self):
+        get = pages({DealerOn.FIRST: "dealeron_searchused.html", DealerOn.API + "1": "dealeron_srp.json"})
+        cruze = dealeron.read(DealerOn.DEALER, get, SEEN)[0][0]
+        self.assertEqual(cruze["extra"]["fees"], {"Dealer Doc Fee": 899})
+
+
 class DealerCarSearch(unittest.TestCase):
     DEALER = {"host": "901scm.com", "website": "https://901scm.com/", "name": "Street Cars of Memphis",
               "city": "Memphis", "state": "TN", "zip": "38108", "lat": None, "lon": None}
@@ -164,6 +204,13 @@ class DealerCarSearch(unittest.TestCase):
         self.assertEqual(van["title"], "2009 Chevrolet Express RV G3500")
         self.assertEqual(van["extra"]["stock"], "173794")
         self.assertEqual(van["photos"], ["https://imagescdn.dealercarsearch.com/Media/23226/23721083/639104980942327575.jpg"])
+
+    def test_keeps_the_free_history_report_from_imports_of_memphis(self):
+        dealer = {**self.DEALER, "host": "importsofmemphis.com", "website": "https://importsofmemphis.com/"}
+        get = pages({"https://importsofmemphis.com/inventory?pagesize=100": "dealercarsearch_i17.html"})
+        found, _ = dealercarsearch.read(dealer, get, SEEN)
+        self.assertIn("https://www.carfax.com/cfm/check_order.cfm?partner=DCS_2&vin=2HNYD28347H514922",
+                      [car["extra"].get("history_url") for car in found])
 
     def test_under_a_full_page_is_a_whole_read(self):
         found, complete = self.read()

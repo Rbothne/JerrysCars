@@ -138,3 +138,21 @@ test("an amount left empty or with no digits is no limit", () => {
   assert.equal(amount(null), 0);
   assert.equal(amount("any"), 0);
 });
+
+test("fewest miles for its age first, unknown last", () => {
+  const list = [{ ...camry, per_year: 8946 }, { ...f150, per_year: 8166 }, { ...cruze, per_year: null }];
+  assert.deepEqual(ids(sorted(list, "peryear")), ["b:2", "a:1", "b:3"]);
+});
+
+test("lowest total cost first", () => {
+  const list = [{ ...camry, total: 7900 }, { ...f150, total: 16100 }, { ...cruze, total: 4100 }];
+  assert.deepEqual(ids(sorted(list, "total")), ["b:3", "a:1", "b:2"]);
+});
+
+test("one owner only, certified only and history report only each keep the cars that say so", () => {
+  const list = [{ ...camry, one_owner: true, certified: null, history: "https://www.carfax.com/vehiclehistory/x" },
+    { ...f150, one_owner: false, certified: true, history: null }, { ...cruze, one_owner: null, certified: false, history: null }];
+  assert.deepEqual(ids(visible(list, { oneOwnerOnly: true })), ["a:1"]);
+  assert.deepEqual(ids(visible(list, { certifiedOnly: true })), ["b:2"]);
+  assert.deepEqual(ids(visible(list, { historyOnly: true })), ["a:1"]);
+});

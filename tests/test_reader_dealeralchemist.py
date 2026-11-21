@@ -96,6 +96,13 @@ class DealerAlchemist(unittest.TestCase):
         with self.assertRaises(readers.NotRead):
             dealeralchemist.read(self.DEALER, lambda url, **o: b"<html>maintenance</html>" if url == PAGE else get(url, **o), SEEN)
 
+class Past(unittest.TestCase):
+    def test_keeps_the_history_report_and_the_fuel_economy(self):
+        found, _ = dealeralchemist.read(DealerAlchemist.DEALER, answers(), SEEN)
+        bmw = next(car for car in found if car["vin"] == "WBX73EF02P5X53474")
+        self.assertEqual(bmw["extra"]["history_url"], "https://www.carfax.com/cfm/check_order.cfm?partner=VNM_0&vin=WBX73EF02P5X53474")
+        self.assertEqual(bmw["extra"]["mpg"], [25, 34])
+
 
 if __name__ == "__main__":
     unittest.main()

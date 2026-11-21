@@ -13,7 +13,7 @@ import json
 import re
 import urllib.parse
 
-from . import NotRead, dealer_listing, drive, site, text
+from . import NotRead, dealer_listing, drive, history, site, text
 from ..listings import num
 
 MAX_PAGES = 40
@@ -66,7 +66,7 @@ def _listing(dealer, card, seen):
     before, fees, total = (re.search(rf'data-{name}="([^"]*)"', card) for name in ("vehicle-price", "dealer-fees", "total-price"))
     shown = re.search(r'class="vehicle-price-value[^"]*">\s*([^<]*)', card)
     stock = re.search(r'data-stock-number="([^"]+)"', card)
-    extra = {"stock": facts.get("stocknumber") or (stock.group(1) if stock else None)}
+    extra = {"stock": facts.get("stocknumber") or (stock.group(1) if stock else None), **history(card)}
     if before and num(before.group(1)):            # "*Includes Dealer Fees": the figure before them is the ask
         price = num(before.group(1))
         extra["shown_price"] = int(num(total.group(1))) if total and num(total.group(1)) else None

@@ -102,6 +102,14 @@ class DealerFire(unittest.TestCase):
         with self.assertRaises(readers.NotRead):
             self.read({self.FIRST: b"<html>maintenance</html>"})
 
+class Past(unittest.TestCase):
+    def test_keeps_the_history_report_and_whether_carfax_counts_one_owner(self):
+        found, _ = dealerfire.read(DealerFire.DEALER, pages({DealerFire.FIRST: "dealerfire_used.html"}), SEEN)
+        reports = [car["extra"] for car in found if car["extra"].get("history_url")]
+        self.assertTrue(reports)
+        self.assertTrue(all(extra["history_url"].startswith("https://www.carfax.com/vehiclehistory/") for extra in reports))
+        self.assertIn(False, [extra.get("one_owner") for extra in reports])
+
 
 if __name__ == "__main__":
     unittest.main()

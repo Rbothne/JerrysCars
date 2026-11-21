@@ -51,7 +51,12 @@
   .cut, .under { justify-self: start; border-radius: 5px; padding: 2px 8px; font-size: 0.86rem; font-variant-numeric: tabular-nums; }
   .cut { background: var(--cut-wash); color: var(--cut); }
   .under { background: var(--good-wash); color: var(--good); }
-  .facts, .dealer { margin: 0; color: var(--soft); font-size: 0.9rem; }
+  .facts, .dealer, .total { margin: 0; color: var(--soft); font-size: 0.9rem; }
+  .total { margin-top: -4px; font-variant-numeric: tabular-nums; }
+  .marks { display: flex; flex-wrap: wrap; gap: 5px; }
+  .mark { border: 1px solid var(--line); border-radius: 5px; padding: 1px 7px; font-size: 0.8rem; color: var(--ink); }
+  .checks { margin: 2px 0 0; font-size: 0.86rem; display: flex; gap: 14px; }
+  .checks a { color: var(--accent); }
   .vin { margin: 0; color: var(--soft); font: 0.78rem ui-monospace, Consolas, monospace; overflow-wrap: anywhere; }
   #more { display: block; margin: 22px auto 0; font: inherit; padding: 9px 18px; border-radius: 6px; border: 0; background: var(--accent); color: var(--accent-ink); cursor: pointer; }
   #empty { color: var(--soft); padding: 30px 0; }
@@ -88,7 +93,9 @@
           <option value="new">Newest listed</option>
           <option value="old">Longest listed</option>
           <option value="price">Lowest price</option>
+          <option value="total">Lowest cost with fees and tax</option>
           <option value="miles">Lowest mileage</option>
+          <option value="peryear">Fewest miles for its age</option>
           <option value="year">Newest model year</option>
         </select>
       </label>
@@ -135,6 +142,9 @@
         <label class="check"><input type="checkbox" name="underOnly"> Below typical price only</label>
         <label class="check"><input type="checkbox" name="droppedOnly"> Price cuts only</label>
         <label class="check"><input type="checkbox" name="localOnly"> Local lots only</label>
+        <label class="check"><input type="checkbox" name="oneOwnerOnly"> One owner</label>
+        <label class="check"><input type="checkbox" name="certifiedOnly"> Certified</label>
+        <label class="check"><input type="checkbox" name="historyOnly"> Free Carfax report</label>
         <button id="clear" type="button">Clear filters</button>
       </div>
     </details>
@@ -146,6 +156,7 @@
 </main>
 <footer>
   <p>Best value compares a car's price with what similar cars in this list ask: the same model within two years and 30,000 miles, adjusted for year, mileage, trim and engine. A car is marked only when it sits a tenth or more under that, and only when there are at least three similar cars to go by. The estimate cannot see condition, accident history or a branded title, and it is loosest for cars under $10,000, so treat a mark as a reason to look, not as an appraisal.</p>
+  <p>The cost under each price adds the dealer's own fee, where its site states one, and Tennessee sales tax for a Memphis buyer: 7% of the price, plus 2.75% of the first $1,600, plus 2.75% of the next $1,600. Title and registration are extra. "One owner" and "Carfax: good value" repeat the badge Carfax shows on the dealer's listing; the Carfax link opens the free report that dealer provides, and the recall check opens the government's lookup for that exact car.</p>
   <p>Prices are asking prices read from each dealer's own website. A price cut compares today's price with the first price this tracker saw for that car, so a car cut before tracking began shows no cut.</p>
   <p>Days listed counts from the dealer's own stock date where the site gives one, otherwise from the first day the tracker saw the car. Dealer fees, tax and title are not included.</p>
 </footer>

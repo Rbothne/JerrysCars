@@ -14,6 +14,7 @@ from . import NotRead, dealer_listing, drive, site
 PAGE = 96                  # the largest page size the site's own menu offers
 MAX_PAGES = 40
 ASKING = ("Selling Price", "Internet Price", "calc_INTERNET PRICE")   # first one present is the asking price
+FEES = {"calc_Dealer Doc Fee": "Dealer Doc Fee", "dealer_fee": "Dealer Fee"}   # price-stack lines that are added on top
 
 
 def _prices(library):
@@ -51,7 +52,8 @@ def _listing(dealer, base, card, seen):
         fuel=card.get("VehicleFuelType"), transmission=card.get("VehicleTransmission"),
         miles=card.get("VehicleMileage"), color=card.get("ExteriorColorLabel"),
         photos=[photo] if photo else [], photo_count=card.get("VehiclePhotoCount") or 0,
-        extra={"stock": card.get("VehicleStockNumber"), "prices": prices})
+        extra={"stock": card.get("VehicleStockNumber"), "prices": prices,
+               "fees": {label: int(prices[name]) for name, label in FEES.items() if prices.get(name)}})
 
 
 def read(dealer, get, seen):

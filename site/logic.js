@@ -15,7 +15,8 @@ export function under(car) {
 }
 
 /** The cars that pass every filter set in `filters`: text, make, model, minPrice, maxPrice, minYear, maxYear,
- *  maxMiles, body, drive ("four" or "two"), fuel, dealer, localOnly, droppedOnly, underOnly. */
+ *  maxMiles, body, drive ("four" or "two"), fuel, dealer, localOnly, droppedOnly, underOnly, oneOwnerOnly,
+ *  certifiedOnly, historyOnly. */
 export function visible(cars, filters) {
   const words = (filters.text || "").toLowerCase().split(/\s+/).filter(Boolean);
   return cars.filter((car) => {
@@ -35,6 +36,9 @@ export function visible(cars, filters) {
     if (filters.localOnly && car.kind === "online") return false;
     if (filters.droppedOnly && !car.drop) return false;
     if (filters.underOnly && !((under(car) || {}).share >= NOTABLE)) return false;
+    if (filters.oneOwnerOnly && car.one_owner !== true) return false;
+    if (filters.certifiedOnly && car.certified !== true) return false;
+    if (filters.historyOnly && !car.history) return false;
     return true;
   });
 }
@@ -52,6 +56,8 @@ const orders = {
   price: (a, b) => a.price - b.price,
   miles: (a, b) => (a.miles ?? last) - (b.miles ?? last),
   year: (a, b) => (b.year || 0) - (a.year || 0),
+  peryear: (a, b) => (a.per_year ?? last) - (b.per_year ?? last) || 0,
+  total: (a, b) => (a.total ?? a.price) - (b.total ?? b.price),
 };
 
 /** A new list in the order named by `how`; cars that tie keep the order they came in. */

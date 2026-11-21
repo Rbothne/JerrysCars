@@ -41,6 +41,13 @@ def _whole(value):
     return int(round(value)) if isinstance(value, (int, float)) else None
 
 
+def _warranty(car):
+    """What is left of the maker's warranty, as [months, miles] for each part still covered. None when none is."""
+    left = {name: [car.get(f"remaining{part}WarrantyMonths") or 0, car.get(f"remaining{part}WarrantyMiles") or 0]
+            for name, part in (("basic", ""), ("drivetrain", "DriveTrain"))}
+    return {name: pair for name, pair in left.items() if pair[0] > 0 and pair[1] > 0} or None
+
+
 def _listing(dealer, car, miles, seen):
     price = car.get("price") or {}
     place = LOCATIONS.get(car.get("locationId"), (None, None, None))
@@ -66,6 +73,7 @@ def _listing(dealer, car, miles, seen):
             "msrp": _whole(price.get("msrp")),
             "previous_price": _whole(car.get("previousPrice")),
             "reservable": car.get("vehiclePurchaseType") == "Reservable",
+            "warranty": _warranty(car),
             "inventory": INVENTORY.get(car.get("fulfillmentType")),
         })
 

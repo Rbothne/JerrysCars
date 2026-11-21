@@ -9,7 +9,7 @@ for a 10 second crawl delay. Seen working on jr-autosales.com, 2026-11-21, 26 of
 import json
 import re
 
-from . import NotRead, dealer_listing, drive, site
+from . import NotRead, dealer_listing, drive, history, site
 
 PAGE = 100                 # asked for; the next page starts after however many came back
 MAX_PAGES = 20
@@ -31,6 +31,10 @@ def _listing(dealer, base, car, seen):
              "days_in_stock": car.get("daysInStock")}
     if stock_art:
         extra["stock_art"] = stock_art
+    report = car.get("carfaxReport") or {}
+    extra.update(history(" ".join(str(part) for part in report.values())))
+    if isinstance(report.get("isOneOwner"), bool):
+        extra["one_owner"] = report["isOneOwner"]
     return dealer_listing(
         dealer, car.get("vuid"), seen,
         url=url, title=" ".join(str(part) for part in named if part),

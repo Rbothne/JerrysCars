@@ -14,6 +14,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
 | VINs | `cartrack/vin.py` | Check digit, and identity from NHTSA's free vPIC service, 50 VINs a request. A decoded VIN's identity wins over the dealer's wording. |
 | Value | `cartrack/value.py` | What cars like each one usually ask, from the other cars in the catalogue: the lower of a price model and the car's nearest neighbours. How far to trust it is in `research/09-value.md`. |
+| Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). Title and registration are not in it. |
 | Build | `build.py` | Reads every dealer that has a reader, updates the catalogue, decodes new VINs, judges value, writes `site/data/cars.json`. |
 | Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the filtering and ordering: make, model, price, year, mileage, body, drive, fuel, dealer, local lots only, price cuts only, below typical price only. Opens in best-value order. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
@@ -24,8 +25,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 228 Python tests
-    node --test tests/js/logic.test.mjs         # 27 page-logic tests
+    py -m unittest discover -s tests -t .       # 249 Python tests
+    node --test tests/js/logic.test.mjs         # 30 page-logic tests
 
 ## Publishing the page
 
@@ -77,6 +78,21 @@ Known limits:
 - The Jim Keras sites, and the Gossett sites, list many of the same cars. The page shows each car once, by VIN, at its lowest price.
 - Some sites turn away particular user agents: Carsforsale.com answers "python-urllib" with a false 500, and the Team Velocity sites answer 406 without "Mozilla/5.0". The readers say which name they send.
 - Car Choice's website is gone, and King Cotton Ford is now Landers Ford North, on Dealer.com.
+
+## What a card shows beyond the car
+
+Seen on the build of 2026-11-21 (3,602 cars):
+
+| Shown | From | Cars |
+|---|---|---|
+| Total with fee and tax | the dealer's stated fee (`extra.fees`) and `cartrack/cost.py` | tax on all; a fee on 977 |
+| Miles a year | mileage and model year | all |
+| Carfax report link | the link on the dealer's own listing (`readers.history`) | 681 |
+| One owner, Carfax's value badge | the Carfax badge on the listing | 27 and 50 |
+| Certified | the dealer's feed, unless it marks every car | 72 |
+| Warranty left, not ready yet | Carvana's feed | 854 and 500 |
+| Fuel economy | City Auto's feed | 328 |
+| Recall check link | NHTSA's lookup by VIN | all |
 
 ## Not built yet
 

@@ -47,6 +47,10 @@ function card(car) {
   if (web(car.url)) Object.assign(link, { href: car.url, rel: "noopener noreferrer", target: "_blank" });
   heading.append(link);
   body.append(heading, make("div", "price", dollars.format(car.price)));
+  if (car.total) {
+    const with_ = car.fees ? `${dollars.format(car.fees)} dealer fee and ${dollars.format(car.tax)} tax` : `${dollars.format(car.tax)} tax; dealer fee not stated`;
+    body.append(make("p", "total", `about ${dollars.format(car.total)} with ${with_}`));
+  }
   const below = under(car);
   if (below && below.share >= NOTABLE) {
     const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);
@@ -54,12 +58,31 @@ function card(car) {
     body.append(badge);
   }
   if (car.drop) body.append(make("div", "cut", `was ${dollars.format(car.was)}, down ${dollars.format(car.drop)}`));
+  const marks = [];
+  if (car.one_owner === true) marks.push("One owner (Carfax)");
+  if (car.carfax_value) marks.push(`Carfax: ${car.carfax_value} value`);
+  if (car.certified === true) marks.push("Certified");
+  const cover = car.warranty && (car.warranty.basic || car.warranty.drivetrain);
+  if (cover) marks.push(`${car.warranty.basic ? "Warranty" : "Drivetrain warranty"}: ${cover[0]} mo or ${whole.format(cover[1])} mi left`);
+  if (car.waiting) marks.push("Not ready for delivery yet");
+  if (marks.length) {
+    const row = make("div", "marks");
+    row.append(...marks.map((mark) => make("span", "mark", mark)));
+    body.append(row);
+  }
   const miles = car.miles == null ? "mileage not given" : `${whole.format(car.miles)} miles`;
-  body.append(make("p", "facts", `${miles} · listed ${car.days} day${car.days === 1 ? "" : "s"}`));
+  const yearly = car.per_year == null ? "" : ` (${whole.format(car.per_year)} a year)`;
+  const economy = car.mpg ? ` · ${car.mpg[0]}/${car.mpg[1]} mpg` : "";
+  body.append(make("p", "facts", `${miles}${yearly}${economy} · listed ${car.days} day${car.days === 1 ? "" : "s"}`));
   const away = car.dealer_miles == null ? "" : ` · ${Math.round(car.dealer_miles)} mi away`;
   const also = car.places > 1 ? ` · on ${car.places} sites` : "";
   body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${away}${also}`));
   if (car.vin) body.append(make("p", "vin", car.vin));
+  const checks = make("p", "checks");
+  const outside = (text, href) => Object.assign(make("a", "", text), { href, rel: "noopener noreferrer", target: "_blank" });
+  if (web(car.history)) checks.append(outside("Carfax report", car.history));
+  if (car.vin) checks.append(outside("Recall check", `https://www.nhtsa.gov/recalls?vin=${encodeURIComponent(car.vin)}`));
+  if (checks.childNodes.length) body.append(checks);
   item.append(photo, body);
   return item;
 }
@@ -82,6 +105,9 @@ function filters() {
     localOnly: data.get("localOnly") === "on",
     droppedOnly: data.get("droppedOnly") === "on",
     underOnly: data.get("underOnly") === "on",
+    oneOwnerOnly: data.get("oneOwnerOnly") === "on",
+    certifiedOnly: data.get("certifiedOnly") === "on",
+    historyOnly: data.get("historyOnly") === "on",
   };
 }
 
