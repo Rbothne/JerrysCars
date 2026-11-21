@@ -56,9 +56,12 @@ jobs:
       # token is not allowed to turn it on.
       - uses: actions/configure-pages@v5
 
+      # The bundle is named for the attempt: pressing "Re-run" on a failed run uploads again, and the deploy
+      # refuses a run that holds two bundles of the same name (seen 2026-11-21).
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
+          name: github-pages-${{ github.run_attempt }}
 
       # The deploy asks GitHub for the bundle just uploaded, and the listing can lag the upload: on 2026-11-21 it
       # asked 0.27 seconds after the upload finished and was told there was none. So wait first, and if it still
@@ -69,6 +72,8 @@ jobs:
       - id: deploy
         uses: actions/deploy-pages@v4
         continue-on-error: true
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
 
       - name: Wait before a second try
         if: steps.deploy.outcome == 'failure'
@@ -77,3 +82,5 @@ jobs:
       - id: redeploy
         if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
