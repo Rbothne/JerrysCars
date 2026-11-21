@@ -32,6 +32,10 @@ jobs:
         with:
           python-version: "3.13"
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Run the tests
         run: |
           python -m unittest discover -s tests -t .
@@ -47,6 +51,12 @@ jobs:
 
       - name: Save the data
         run: bash .github/scripts/data-branch.sh save
+
+      # enablement: true turns Pages on with the "GitHub Actions" source on the first run,
+      # so the repository needs no manual Settings change.
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
