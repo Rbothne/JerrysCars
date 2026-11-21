@@ -80,12 +80,15 @@ def _number(value):
 
 
 def _money(row, extra):
-    """What the car costs to drive away: the dealer's stated fees (None when it states none), Tennessee sales
-    tax on price and fees, and the total. Title and registration are not in it."""
+    """What the car costs. `price` is the asking price with the dealer's stated fees in it, because that is what
+    the buyer pays before tax and what some dealers advertise (Jim Keras does; Jimmy Gray shows the fee
+    apart). `base` is the price without them, `fees` their sum (None when the dealer states none), `tax`
+    Tennessee sales tax on `price`, and `total` the two together. Title and registration are not in it."""
     stated = [num(amount) for amount in (extra.get("fees") or {}).values()]
     fees = int(sum(amount for amount in stated if amount)) or None
-    tax = round(cost.tennessee_tax(row["price"] + (fees or 0)))
-    return {"fees": fees, "tax": tax, "total": int(row["price"]) + (fees or 0) + tax}
+    price = int(row["price"]) + (fees or 0)
+    tax = round(cost.tennessee_tax(price))
+    return {"price": price, "base": int(row["price"]), "fees": fees, "tax": tax, "total": price + tax}
 
 
 def _past(extra):
@@ -107,7 +110,8 @@ def _engine(decoded):
 
 def page_data(db, dealers, now, report=None, judge=value.judge):
     """What the page shows: every live car with a price, how long it has been for sale, and what its price
-    has done. `was` and `drop` compare today's price with the first one the tracker saw. A car listed in
+    has done. `price` includes the dealer's stated fees. `was` and `drop` compare today's price with the first
+    one the tracker saw. A car listed in
     several places is shown once, at its lowest price, with `places` saying how many. `typical` is what cars
     like it ask and `similar` how many that rests on (cartrack/value.py); both are None for a car not judged.
     `total` adds the dealer's stated fees and Tennessee sales tax; `per_year` is miles for each year on the road."""
@@ -123,16 +127,17 @@ def page_data(db, dealers, now, report=None, judge=value.judge):
         photos = json.loads(row["photos"] or "[]")
         extra = json.loads(row["extra"] or "{}")
         years = max(int(now[:4]) - row["year"] + 1, 1) if row["year"] else None
+        money = _money(row, extra)
         vehicles.setdefault(row["vehicle_id"], []).append({
             "id": row["id"], "title": row["title"], "url": row["url"],
-            "price": row["price"], "was": first if drop else None, "drop": drop,
+            "was": first + (money["fees"] or 0) if drop else None, "drop": drop,
             "cuts": sum(1 for before, after in zip(points, points[1:]) if after < before),
             "days": _days(min(row["first_seen"], row["posted"] or row["first_seen"]), now),
             "first_seen": row["first_seen"],
             "year": row["year"], "make": row["make"], "model": row["model"], "trim": row["trim"],
             "body": row["body"], "drive": row["drive"], "miles": row["miles"], "color": row["color"], "vin": row["vin"],
             "per_year": row["miles"] // years if years and row["miles"] is not None else None,
-            **_money(row, extra), **_past(extra),
+            **money, **_past(extra),
             "fuel": _fuel(row["fuel"], decodes.get(row["vin"], {})),
             "kind": "online" if dealer.get("platform") in ONLINE else "lot",
             "dealer": row["seller_name"] if not dealer else dealer.get("name"), "dealer_key": row["source"],

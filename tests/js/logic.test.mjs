@@ -75,7 +75,7 @@ test("cars that tie keep the order they came in, whichever way the order runs", 
 });
 
 test("each field starts in the direction a buyer usually wants", () => {
-  assert.deepEqual(DIRECTIONS, { value: "desc", price: "asc", total: "asc", drop: "desc", share: "desc",
+  assert.deepEqual(DIRECTIONS, { value: "desc", price: "asc", drop: "desc", share: "desc",
     year: "desc", miles: "asc", peryear: "asc", days: "asc" });
 });
 
@@ -165,11 +165,6 @@ test("an amount left empty or with no digits is no limit", () => {
 test("fewest miles for its age first, unknown last", () => {
   const list = [{ ...camry, per_year: 8946 }, { ...f150, per_year: 8166 }, { ...cruze, per_year: null }];
   assert.deepEqual(ids(sorted(list, "peryear")), ["b:2", "a:1", "b:3"]);
-});
-
-test("lowest total cost first", () => {
-  const list = [{ ...camry, total: 7900 }, { ...f150, total: 16100 }, { ...cruze, total: 4100 }];
-  assert.deepEqual(ids(sorted(list, "total")), ["b:3", "a:1", "b:2"]);
 });
 
 test("one owner only, certified only and history report only each keep the cars that say so", () => {

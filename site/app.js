@@ -47,10 +47,8 @@ function card(car) {
   if (web(car.url)) Object.assign(link, { href: car.url, rel: "noopener noreferrer", target: "_blank" });
   heading.append(link);
   body.append(heading, make("div", "price", dollars.format(car.price)));
-  if (car.total) {
-    const with_ = car.fees ? `${dollars.format(car.fees)} dealer fee and ${dollars.format(car.tax)} tax` : `${dollars.format(car.tax)} tax; dealer fee not stated`;
-    body.append(make("p", "total", `about ${dollars.format(car.total)} with ${with_}`));
-  }
+  const fee = car.fees ? `includes ${dollars.format(car.fees)} dealer fee` : "dealer fee not stated";
+  body.append(make("p", "total", car.total ? `${fee} · about ${dollars.format(car.total)} with tax` : fee));
   const below = under(car);
   if (below && below.share >= NOTABLE) {
     const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);

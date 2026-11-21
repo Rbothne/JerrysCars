@@ -204,15 +204,40 @@ class PageData(unittest.TestCase):
         catalogue.record(self.db, car("peckdaniel.com", "3", year=2027, miles=40))
         self.assertEqual([one["per_year"] for one in self.cars()], [8946, 9000, 40])
 
-    def test_the_total_adds_the_dealers_fees_and_tennessee_tax_on_both(self):
+    def test_the_price_shown_includes_the_dealers_stated_fee(self):
+        # Jim Keras advertises $7,252 for a car its feed prices at $6,353 plus an $899 doc fee (2026-11-21)
+        catalogue.record(self.db, car("peckdaniel.com", "1", price=6353, extra={"fees": {"Dealer Doc Fee": 899}}))
+        shown = self.cars()[0]
+        self.assertEqual((shown["price"], shown["base"], shown["fees"]), (7252, 6353, 899))
+
+    def test_the_total_adds_tennessee_tax_on_the_price_with_its_fee(self):
         catalogue.record(self.db, car("peckdaniel.com", "1", price=10000, extra={"fees": {"Dealer Doc Fee": 899}}))
         shown = self.cars()[0]
-        self.assertEqual((shown["fees"], shown["tax"], shown["total"]), (899, 851, 11750))
+        self.assertEqual((shown["price"], shown["tax"], shown["total"]), (10899, 851, 11750))
+
+    def test_a_price_cut_is_measured_between_prices_that_both_include_the_fee(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", "2026-11-21T05:00", price=6500, extra={"fees": {"Doc Fee": 500}}))
+        catalogue.record(self.db, car("peckdaniel.com", "1", "2026-11-23T05:00", price=5900, extra={"fees": {"Doc Fee": 500}}))
+        shown = self.cars()[0]
+        self.assertEqual((shown["price"], shown["was"], shown["drop"]), (6400, 7000, 600))
+
+    def test_the_judge_weighs_the_price_with_its_fee(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", price=6353, extra={"fees": {"Dealer Doc Fee": 899}}))
+        given = []
+        build.page_data(self.db, [PECK], NOW, judge=lambda cars, year: given.extend(cars) or {})
+        self.assertEqual(given[0]["price"], 7252)
+
+    def test_one_car_on_two_sites_is_shown_where_it_costs_least_with_fees(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1", vin="1HGCM82633A004352", price=6000, extra={"fees": {"Doc Fee": 900}}))
+        catalogue.record(self.db, car("jimkerasnissan.com", "9", vin="1HGCM82633A004352", price=6500))
+        shown = self.cars()
+        self.assertEqual([(one["id"], one["price"]) for one in shown], [("jimkerasnissan.com:9", 6500)])
 
     def test_a_car_whose_dealer_states_no_fee_is_totalled_with_tax_alone(self):
         catalogue.record(self.db, car("peckdaniel.com", "1", price=10000))
         shown = self.cars()[0]
-        self.assertEqual((shown["fees"], shown["tax"], shown["total"]), (None, 788, 10788))
+        self.assertEqual((shown["price"], shown["base"], shown["fees"], shown["tax"], shown["total"]),
+                         (10000, 10000, None, 788, 10788))
 
     def test_a_car_carries_what_its_listing_says_of_its_past(self):
         catalogue.record(self.db, car("peckdaniel.com", "1", extra={

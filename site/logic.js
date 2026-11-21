@@ -49,7 +49,6 @@ const share = (car) => (car.drop && car.was ? car.drop / car.was : 0);
 const figures = {
   value: (car) => (car.typical ? (car.typical - car.price) / car.typical : null),
   price: (car) => car.price,
-  total: (car) => car.total ?? car.price,
   drop: (car) => car.drop || 0,
   share,
   year: (car) => car.year ?? null,
@@ -59,7 +58,7 @@ const figures = {
 };
 
 /** The direction each field starts in: the one a buyer usually wants (cheapest, newest, biggest cut). */
-export const DIRECTIONS = { value: "desc", price: "asc", total: "asc", drop: "desc", share: "desc",
+export const DIRECTIONS = { value: "desc", price: "asc", drop: "desc", share: "desc",
   year: "desc", miles: "asc", peryear: "asc", days: "asc" };
 
 /** A new list ordered by the field `how`, "asc" or "desc" (the field's own direction when not given).

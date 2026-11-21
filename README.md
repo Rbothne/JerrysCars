@@ -25,8 +25,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 249 Python tests
-    node --test tests/js/logic.test.mjs         # 34 page-logic tests
+    py -m unittest discover -s tests -t .       # 253 Python tests
+    node --test tests/js/logic.test.mjs         # 33 page-logic tests
 
 ## Publishing the page
 
@@ -72,7 +72,7 @@ Each platform's route, and what was tried and failed, is in `research/08-routing
 Known limits:
 
 - Imports of Memphis shows one unlabelled figure per car that is a down payment, so its cars have no asking price and stay off the page. The figure is kept in `extra.unlabelled_price`.
-- The asking price is the figure before the dealer's fees on every platform. Fees and the fee-inclusive figure are kept in `extra`.
+- The catalogue keeps the asking price before the dealer's fees, and the fees beside it in `extra.fees`. The page shows the two added together, because dealers differ: Jim Keras advertises the price with its $899 fee in it, Jimmy Gray shows its $425 fee apart. A dealer that states no fee is shown at its asking price, marked "dealer fee not stated".
 - Dealer.com (six sites) and Dealer Inspire (two) refuse plain requests and have no reader.
 - Landers Used (Dealer eProcess) and Supercars Autosales (Dealer Car Search) are behind a Cloudflare challenge on every page. A route through a visible browser was found for both and is not part of the build: `research/08-routing-dealereprocess.md`, `research/08-routing-unknowns.md`. `cartrack/readers/dealereprocess.py` is written and tested but not registered.
 - The Jim Keras sites, and the Gossett sites, list many of the same cars. The page shows each car once, by VIN, at its lowest price.
