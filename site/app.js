@@ -1,6 +1,6 @@
 // The page: load the cars build.py wrote, and show the ones the filters allow. The choosing is in logic.js.
 
-import { NOTABLE, sorted, under, visible } from "./logic.js";
+import { NOTABLE, amount, sorted, under, visible } from "./logic.js";
 
 const STEP = 120;                                  // cars drawn at a time
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -70,11 +70,11 @@ function filters() {
     text: data.get("text"),
     make: data.get("make"),
     model: data.get("model"),
-    minPrice: Number(data.get("minPrice")) || 0,
-    maxPrice: Number(data.get("maxPrice")) || 0,
-    minYear: Number(data.get("minYear")) || 0,
-    maxYear: Number(data.get("maxYear")) || 0,
-    maxMiles: Number(data.get("maxMiles")) || 0,
+    minPrice: amount(data.get("minPrice")),
+    maxPrice: amount(data.get("maxPrice")),
+    minYear: amount(data.get("minYear")),
+    maxYear: amount(data.get("maxYear")),
+    maxMiles: amount(data.get("maxMiles")),
     body: data.get("body"),
     drive: data.get("drive"),
     fuel: data.get("fuel"),

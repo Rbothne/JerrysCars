@@ -25,7 +25,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
     py -m unittest discover -s tests -t .       # 228 Python tests
-    node --test tests/js/logic.test.mjs         # 25 page-logic tests
+    node --test tests/js/logic.test.mjs         # 27 page-logic tests
 
 ## Publishing the page
 

@@ -3,6 +3,11 @@
 export const NOTABLE = 0.1;                     // under typical by less than this is within the estimate's noise
 const DRIVES = { four: ["4wd", "awd"], two: ["2wd", "fwd", "rwd"] };
 
+/** The whole number someone typed into a price, year or mileage box ("$12,500" is 12500). Nothing usable is 0: no limit. */
+export function amount(text) {
+  return Number(String(text ?? "").split(".")[0].replace(/\D/g, "")) || 0;
+}
+
 /** How far a car sits below what similar cars ask: {amount, share}. Null when it was never judged or is not below. */
 export function under(car) {
   if (!car.typical || car.price >= car.typical) return null;

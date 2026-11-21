@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { sorted, under, visible } from "../../site/logic.js";
+import { amount, sorted, under, visible } from "../../site/logic.js";
 
 const camry = { id: "a:1", title: "2012 Toyota Camry LE", make: "toyota", model: "Camry", year: 2012, body: "sedan", drive: "fwd", fuel: "hybrid", kind: "lot",
   price: 6500, was: null, drop: 0, miles: 134200, days: 4, dealer_key: "a", typical: 8000, similar: 6 };
@@ -124,4 +124,17 @@ test("newest model year first", () => {
 
 test("an order nobody named falls back to best value", () => {
   assert.deepEqual(ids(sorted(cars, "")), ["a:1", "b:2", "b:3"]);
+});
+
+test("an amount typed with a dollar sign, commas or spaces is read as its whole dollars", () => {
+  assert.equal(amount("$12,500"), 12500);
+  assert.equal(amount(" 8 000 "), 8000);
+  assert.equal(amount("12500.75"), 12500);
+  assert.equal(amount("2019"), 2019);
+});
+
+test("an amount left empty or with no digits is no limit", () => {
+  assert.equal(amount(""), 0);
+  assert.equal(amount(null), 0);
+  assert.equal(amount("any"), 0);
 });
