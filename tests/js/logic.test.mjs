@@ -21,6 +21,72 @@ test("search matches every word typed, in any order and case", () => {
   assert.deepEqual(ids(visible(cars, { text: "toyota ford" })), []);
 });
 
+const crv = { id: "c:4", title: "2019 Honda CR-V EX", make: "honda", model: "CR-V", price: 18000 };
+const truck = { id: "c:5", title: "2017 Ford F150 SuperCrew Cab Lariat", make: "ford", model: "F-150", price: 21000 };
+const tesla = { id: "c:6", title: "2020 Tesla Model 3 Long Range", make: "tesla", model: "Model 3", price: 19000 };
+const rogue = { id: "c:7", title: "2018 Nissan Rogue SV", make: "nissan", model: "Rogue", price: 12000 };
+const vogue = { id: "c:8", title: "2016 Land Rover Range Rover Vogue", make: "land rover", model: "Range Rover", price: 30000 };
+const corolla = { id: "c:9", title: "2015 Toyota Corolla L", make: "toyota", model: "Corolla", price: 8000 };
+const scion = { id: "c:10", title: "2016 Scion iM base", make: "toyota", model: "iM", price: 9000 };
+
+test("search ignores the hyphens and spaces inside a model name", () => {
+  const list = [f150, crv, truck, tesla, camry];
+  for (const typed of ["f150", "F-150", "f 150"]) assert.deepEqual(ids(visible(list, { text: typed })), ["b:2", "c:5"], typed);
+  for (const typed of ["crv", "cr-v"]) assert.deepEqual(ids(visible(list, { text: typed })), ["c:4"], typed);
+  assert.deepEqual(ids(visible(list, { text: "model3" })), ["c:6"]);
+});
+
+test("a name typed as letters then a number is read as one name when some car has it", () => {
+  const van = { id: "e", title: "2014 Ford E-150 Cargo", make: "ford", model: "E-150" };       // has an "f" and a "150"
+  assert.deepEqual(ids(visible([f150, truck, van], { text: "f 150" })), ["b:2", "c:5"]);
+  assert.deepEqual(ids(visible([f150, truck, van], { text: "xlt f 150" })), ["b:2"]);
+});
+
+test("a word and a number that are no car's name stay two words", () => {
+  assert.deepEqual(ids(visible(cars, { text: "camry 2012" })), ["a:1"]);
+});
+
+test("letters typed across two words of a title are not a match", () => {
+  assert.deepEqual(ids(visible([corolla, camry], { text: "taco" })), []);      // "toyoTA COrolla"
+});
+
+test("search knows the common nicknames for a make", () => {
+  assert.deepEqual(ids(visible(cars, { text: "chevy cruze" })), ["b:3"]);
+  assert.deepEqual(ids(visible([{ id: "v", title: "2014 Volkswagen Jetta SE" }, camry], { text: "vw" })), ["v"]);
+});
+
+test("a misspelled word finds the names one slip away", () => {
+  assert.deepEqual(ids(visible(cars, { text: "camery" })), ["a:1"]);          // a letter too many
+  assert.deepEqual(ids(visible(cars, { text: "chevorlet" })), ["b:3"]);       // two letters swapped
+  assert.deepEqual(ids(visible(cars, { text: "toyta 2012" })), ["a:1"]);      // a letter missing
+  assert.deepEqual(ids(visible([{ id: "v", title: "2014 Volkswagen Jetta SE" }, camry], { text: "volkswagon" })), ["v"]);
+});
+
+test("a misspelling still matches while the word is only half typed", () => {
+  assert.deepEqual(ids(visible(cars, { text: "chevor" })), ["b:3"]);
+});
+
+test("a word spelled right is not widened to its near misses", () => {
+  assert.deepEqual(ids(visible([rogue, vogue], { text: "rogue" })), ["c:7"]);
+});
+
+test("a misspelling is not matched to a word that starts with another letter", () => {
+  assert.deepEqual(ids(visible([vogue], { text: "rogue" })), []);
+});
+
+test("years and other numbers are never guessed at", () => {
+  assert.deepEqual(ids(visible(cars, { text: "2014" })), []);
+});
+
+test("short words are never guessed at", () => {
+  assert.deepEqual(ids(visible([{ id: "k", title: "2018 Kia Soul Base" }], { text: "kio" })), []);
+});
+
+test("search reads the make and model as well as the title", () => {
+  assert.deepEqual(ids(visible([scion, crv], { text: "toyota" })), ["c:10"]);
+  assert.deepEqual(ids(visible([truck, crv], { text: "f-150" })), ["c:5"]);
+});
+
 test("a top price leaves out dearer cars", () => {
   assert.deepEqual(ids(visible(cars, { maxPrice: 7000 })), ["a:1", "b:3"]);
 });

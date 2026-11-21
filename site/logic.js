@@ -14,14 +14,87 @@ export function under(car) {
   return { amount: car.typical - car.price, share: (car.typical - car.price) / car.typical };
 }
 
+// ---- search ----------------------------------------------------------------------------------------------------
+// A typed word matches a car when the car's title, make or model contains it, punctuation aside ("crv" finds
+// CR-V). A word with letters and digits also matches across a space ("f150" finds "F 150"); plain letters do
+// not, or "taco" would find every Toyota Corolla. A word that matches no car at all is taken for a misspelling
+// and matched to names one slip away; a word that does match some car is never widened.
+
+const NICKNAMES = { chevy: "chevrolet", vw: "volkswagen", caddy: "cadillac", bimmer: "bmw", beemer: "bmw",
+  beamer: "bmw", subie: "subaru", benz: "mercedes" };
+const GUESS_FROM = 4;                           // shorter words have too many neighbours to guess at
+const TWO_SLIPS_FROM = 8;                       // a word this long may be two slips out, a shorter one only one
+
+const bare = (text) => text.toLowerCase().replace(/[^a-z0-9\s]/g, "");
+const read = new WeakMap();
+
+/** What search looks at in one car, worked out once: its words run together as typed, and each name in it. */
+function reading(car) {
+  if (!read.has(car)) {
+    const all = `${car.title || ""} ${car.make || ""} ${car.model || ""}`;
+    const plain = bare(all).replace(/\s+/g, " ");
+    read.set(car, { plain, joined: plain.replace(/ /g, ""),
+      names: [...new Set(all.toLowerCase().split(/[^a-z]+/).filter((name) => name.length >= GUESS_FROM))] });
+  }
+  return read.get(car);
+}
+
+function contains(seen, word) {
+  return [word, NICKNAMES[word]].some((form) => form && (seen.plain.includes(form)
+    || (/[a-z]/.test(form) && /\d/.test(form) && seen.joined.includes(form))));
+}
+
+/** How many slips turn one word into the other: a letter added, dropped or changed, or two neighbours swapped. */
+function slips(a, b) {
+  let [before, last] = [[], Array.from({ length: b.length + 1 }, (_, at) => at)];
+  for (let i = 1; i <= a.length; i++) {
+    const row = [i];
+    for (let j = 1; j <= b.length; j++) {
+      row[j] = Math.min(last[j] + 1, row[j - 1] + 1, last[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) row[j] = Math.min(row[j], before[j - 2] + 1);
+    }
+    [before, last] = [last, row];
+  }
+  return last[b.length];
+}
+
+/** Whether `word` could be a misspelling of `name`, or of its start (the word may be only half typed). */
+function near(word, name) {
+  if (word[0] !== name[0]) return false;         // people rarely get the first letter wrong
+  const allowed = word.length < TWO_SLIPS_FROM ? 1 : 2;
+  for (let length = Math.max(word.length - allowed, 1); length <= Math.min(word.length + allowed, name.length); length++) {
+    if (slips(word, name.slice(0, length)) <= allowed) return true;
+  }
+  return false;
+}
+
+/** The words typed, with letters and a number after them made one word when some car carries them as one name
+ *  ("f 150" is "f150", "model 3" is "model3"; "camry 2012" stays two). */
+function typed(text, cars) {
+  const words = [];
+  for (const word of bare(text || "").split(/\s+/).filter(Boolean)) {
+    const one = (words[words.length - 1] || "") + word;
+    if (/^[a-z]+\d+$/.test(one) && /^\d/.test(word) && cars.some((car) => reading(car).joined.includes(one))) words[words.length - 1] = one;
+    else words.push(word);
+  }
+  return [...new Set(words)];
+}
+
+/** One test per typed word, each taking a car's reading. */
+function sought(text, cars) {
+  return typed(text, cars).map((word) => {
+    const guess = word.length >= GUESS_FROM && /^[a-z]+$/.test(word) && !cars.some((car) => contains(reading(car), word));
+    return guess ? (seen) => seen.names.some((name) => near(word, name)) : (seen) => contains(seen, word);
+  });
+}
+
 /** The cars that pass every filter set in `filters`: text, make, model, minPrice, maxPrice, minYear, maxYear,
  *  maxMiles, body, drive ("four" or "two"), fuel, dealer, localOnly, droppedOnly, underOnly, oneOwnerOnly,
  *  certifiedOnly, historyOnly. */
 export function visible(cars, filters) {
-  const words = (filters.text || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const words = sought(filters.text, cars);
   return cars.filter((car) => {
-    const title = (car.title || "").toLowerCase();
-    if (!words.every((word) => title.includes(word))) return false;
+    if (words.length && !words.every((matches) => matches(reading(car)))) return false;
     if (filters.make && car.make !== filters.make) return false;
     if (filters.model && car.model !== filters.model) return false;
     if (filters.minPrice && car.price < filters.minPrice) return false;
