@@ -24,7 +24,7 @@ jobs:
     timeout-minutes: 30
     environment:
       name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
+      url: ${{ steps.deploy.outputs.page_url || steps.redeploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,5 +60,20 @@ jobs:
         with:
           path: site
 
+      # The deploy asks GitHub for the bundle just uploaded, and the listing can lag the upload: on 2026-11-21 it
+      # asked 0.27 seconds after the upload finished and was told there was none. So wait first, and if it still
+      # fails, wait longer and try once more.
+      - name: Give the uploaded page a moment to be listed
+        run: sleep 15
+
       - id: deploy
+        uses: actions/deploy-pages@v4
+        continue-on-error: true
+
+      - name: Wait before a second try
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 60
+
+      - id: redeploy
+        if: steps.deploy.outcome == 'failure'
         uses: actions/deploy-pages@v4
