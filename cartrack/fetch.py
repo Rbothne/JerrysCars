@@ -1,6 +1,7 @@
 """Plain HTTP: gzip, a few tries, and clear errors for "gone" and "slow down". After aptrack/fetch.py."""
 
 import gzip
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -45,19 +46,29 @@ def get(url, *, timeout=25, tries=3, headers=None, opener=urllib.request.urlopen
     raise last
 
 
-def paced(get=get, delay=3.0, clock=time.monotonic, sleep=time.sleep):
+def paced(get=get, delay=3.0, clock=time.monotonic, sleep=time.sleep, shared=()):
     """A `get` that keeps requests to the same site at least `delay` seconds apart. Three seconds is the
-    crawl delay DealerOn sites ask for in robots.txt."""
-    last = {}
+    crawl delay DealerOn sites ask for in robots.txt.
+
+    It may be called from many threads at once (the build reads every source side by side). Each site is a
+    lane: one request at a time, `delay` after the last one ended, while other sites' lanes carry on. A
+    company that answers on many hosts is one lane when its domain is named in `shared`: every
+    "*.craigslist.org" waits on the same clock, so seven cities read side by side ask Craigslist no faster
+    than one would."""
+    last, lanes, guard = {}, {}, threading.Lock()
 
     def paced_get(url, **options):
         host = urllib.parse.urlparse(url).netloc
-        if host in last:
-            wait = last[host] + delay - clock()
-            if wait > 0:
-                sleep(wait)
-        try:
-            return get(url, **options)
-        finally:
-            last[host] = clock()
+        lane = next((domain for domain in shared if host == domain or host.endswith("." + domain)), host)
+        with guard:
+            turn = lanes.setdefault(lane, threading.Lock())
+        with turn:
+            if lane in last:
+                wait = last[lane] + delay - clock()
+                if wait > 0:
+                    sleep(wait)
+            try:
+                return get(url, **options)
+            finally:
+                last[lane] = clock()
     return paced_get

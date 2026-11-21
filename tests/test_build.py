@@ -1,3 +1,4 @@
+import threading
 import unittest
 
 import build
@@ -185,6 +186,55 @@ class ReadSources(unittest.TestCase):
 
     def test_a_place_of_a_kind_with_no_reader_is_left_alone(self):
         self.assertEqual(self.run_build({}), [])
+
+
+class SideBySide(unittest.TestCase):
+    """Every source is asked at once, each at its own site's pace, so a run takes as long as its slowest site
+    and not as long as all of them added up."""
+
+    def setUp(self):
+        self.db = catalogue.open_catalogue(":memory:")
+        self.addCleanup(self.db.close)
+
+    def test_two_sources_are_being_read_at_the_same_moment(self):
+        together = threading.Barrier(2, timeout=5)      # each reader waits here for the other: alone it would time out
+
+        def dealer(dealer, get, seen):
+            together.wait()
+            return [car(dealer["host"], "1", seen)], True
+
+        def place(place, get, seen, known=()):
+            together.wait()
+            return [detailed("a", seen)], True
+        jobs = (build.source_jobs(self.db, [CRAIGSLIST], {"craigslist": place}, None, NOW)
+                + build.dealer_jobs([PECK], {"autorevo": dealer}, None, NOW))
+        report = build.run(self.db, jobs, NOW, say=lambda line: None, workers=8)
+        self.assertEqual([(line["dealer"], line["ok"], line["read"]) for line in report],
+                         [("memphis.craigslist.org", True, 1), ("peckdaniel.com", True, 1)])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM listing").fetchone()[0], 2)
+
+    def test_the_report_keeps_the_order_the_sources_were_given_in_whichever_finishes_first(self):
+        first_may_go = threading.Event()
+
+        def slow(dealer, get, seen):
+            first_may_go.wait(5)
+            return [car(dealer["host"], "1", seen)], True
+
+        def quick(dealer, get, seen):
+            first_may_go.set()
+            return [car(dealer["host"], "9", seen)], True
+        report = build.read_dealers(self.db, [PECK, KERAS], {"autorevo": slow, "dealeron": quick}, None, NOW,
+                                    say=lambda line: None, workers=8)
+        self.assertEqual([line["dealer"] for line in report], ["peckdaniel.com", "jimkerasnissan.com"])
+
+    def test_a_reader_that_fails_beside_others_is_reported_for_its_own_source_only(self):
+        def broken(dealer, get, seen):
+            raise readers.NotRead("no cars on the page")
+        report = build.read_dealers(self.db, [PECK, KERAS], {"autorevo": broken, "dealeron": reader("9")}, None, NOW,
+                                    say=lambda line: None, workers=8)
+        self.assertEqual([(line["dealer"], line["ok"]) for line in report],
+                         [("peckdaniel.com", False), ("jimkerasnissan.com", True)])
+        self.assertIn("no cars on the page", report[0]["error"])
 
 
 class DecodeVins(unittest.TestCase):

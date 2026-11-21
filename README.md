@@ -22,14 +22,14 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Build | `build.py` | Reads every source and every dealer that has a reader, updates the catalogue, decodes new VINs, names the listings that have only a seller's words, judges value, writes `site/data/cars.json`. |
 | Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: within so many miles, sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed, distance), ascending or descending, and opens with the cars furthest under similar ones first. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
-| Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. |
+| Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. Every source is read at the same time, each site at its own pace (below). |
 
 ## Run
 
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 317 Python tests
+    py -m unittest discover -s tests -t .       # 323 Python tests
     node --test tests/js/logic.test.mjs         # 51 page-logic tests
 
 ## Publishing the page
@@ -60,9 +60,22 @@ run log and keeps its last known cars.
 - Craigslist's robots.txt allows these pages; its terms of use forbid collecting listings by program without a licence.
 - Make and model are whatever the seller typed, matched to models the catalogue already knows; a make it has never seen, or a model it has never seen, stays unnamed and is not judged. An odometer of 10 to 400 on a car over three years old is read as thousands.
 - Private cars are judged against a catalogue that is almost all dealers, who ask more, so most show as under similar cars. A car whose seller says the title is not clean is shown without a judgement.
-- Six more cities were added the same day, the nearest by Craigslist's own list of areas: Jonesboro (60 miles), North Mississippi (62), Jackson, TN (77), Southeast Missouri (122), Little Rock (130) and Muscle Shoals (136). Their search pages held 11, 40, 20 and 82 by-owner results for the four that were counted, and shared no listing with Memphis's page. Since then no car is left off for being far: each carries its distance from its own map pin, and the page filters and sorts by it. A listing two cities both show is one car.
+- Six more cities were added the same day, the nearest by Craigslist's own list of areas: Jonesboro (60 miles), North Mississippi (62), Jackson, TN (77), Southeast Missouri (122), Little Rock (130) and Muscle Shoals (136). Read in full from a home connection that evening, they gave 11, 40, 20, 13, 82 and 7 listings, none shared with another city: 291 private cars on the page with Memphis's 120, of which 112 are within 60 miles, 143 between 60 and 150, and 36 beyond. 235 were named to a known model and 29 had enough similar cars to be judged; 8 of those sat a tenth or more under. Since then no car is left off for being far: each carries its distance from its own map pin, and the page filters and sorts by it. A listing two cities both show is one car.
 - A search page stops at about 360 results. None of these cities is near that, but a page of 300 or more is asked again in five price bands, which the page honours (`min_price=5000&max_price=10000` gave 55 results, all from $5,000 to $10,000).
 - The seller's description and phone number are not kept.
+
+## Reading every site at once
+
+The build starts every source's read together, a thread each, and writes the catalogue itself, one source at a
+time, in the order the sources are listed. Each site is still asked one request at a time, three seconds
+after its last one ended; only different sites overlap. So a run takes as long as its slowest site, not as
+long as all of them added up. Six small dealers read this way on 2026-11-21 took 4.3 seconds for 10 requests,
+with no site asked twice inside three seconds.
+
+Hosts that belong to one company share one clock (`ONE_COMPANY` in `build.py`): every `*.craigslist.org`,
+so seven cities and their listings' pages together ask Craigslist one request every three seconds, exactly
+as one city did. That makes Craigslist the slowest lane whenever many listings are new, about 15 minutes for
+the 300 of a first read, and a few seconds on an ordinary run, when only new listings are asked for.
 
 ## When a source has cars and the page shows none
 

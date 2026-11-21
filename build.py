@@ -6,7 +6,9 @@ Reads dealers.json (from discover.py) and sources.json (hand-kept: the places th
 website). Updates data/catalogue.db and writes site/data/cars.json. A dealer or source whose read fails keeps
 what the catalogue already knew about it; the others carry on."""
 
+import concurrent.futures
 import datetime
+import functools
 import json
 import pathlib
 import re
@@ -21,6 +23,8 @@ from cartrack.sources import SOURCES
 ROOT = pathlib.Path(__file__).parent
 ONLINE = {"carvana"}                              # platforms that deliver a car instead of keeping a lot to visit
 OWN_IDS = 0.8          # a read where fewer than this share of the listings have an id of their own was read wrongly
+WORKERS = 32           # sources read at the same time; each site still gets one request at a time (fetch.paced)
+ONE_COMPANY = ("craigslist.org",)                 # every host under these is paced as a single site
 
 
 def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
@@ -51,30 +55,56 @@ def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
     return line
 
 
-def read_dealers(db, dealers, readers, get, now, say=print):
-    """Read each dealer whose platform has a reader and record what it lists. Returns one report line a dealer.
-    Cars missing from a read are marked gone only when the reader saw the dealer's whole inventory."""
-    return [_keep(db, dealer["key"], dealer["platform"], dealer["host"],
-                  lambda: readers[dealer["platform"]](dealer, get, now), now, say)
+def dealer_jobs(dealers, readers, get, now):
+    """One read to run for each dealer whose platform has a reader."""
+    return [{"key": dealer["key"], "platform": dealer["platform"], "source": dealer["host"], "floor": catalogue.FLOOR,
+             "read": functools.partial(readers[dealer["platform"]], dealer, get, now)}
             for dealer in dealers if dealer.get("platform") in readers and dealer.get("host")]
 
 
-def read_sources(db, places, readers, get, now, say=print):
-    """Read each place in sources.json whose kind has a reader, and report it the way a dealer is reported.
-    The reader is told which of the place's listings the catalogue already holds in full (the ones with a
-    posted time, which only a listing's own page gives), so it asks for each listing's page once. A place
-    may set its own `floor`: classifieds turn over faster than a dealer's lot."""
-    report = []
+def source_jobs(db, places, readers, get, now):
+    """One read to run for each place in sources.json whose kind has a reader. The reader is told which of the
+    place's listings the catalogue already holds in full (the ones with a posted time, which only a listing's
+    own page gives), so it asks for each listing's page once. A place may set its own `floor`: classifieds
+    turn over faster than a dealer's lot."""
+    jobs = []
     for place in places:
         read = readers.get(place.get("kind"))
         if not read:
             continue
         known = {row[0] for row in db.execute(
             "SELECT source_id FROM listing WHERE source = ? AND posted IS NOT NULL", (place["key"],))}
-        report.append(_keep(db, place["key"], place["kind"], place["key"],
-                            lambda: read(place, get, now, known=known), now, say,
-                            place.get("floor", catalogue.FLOOR)))
-    return report
+        jobs.append({"key": place["key"], "platform": place["kind"], "source": place["key"],
+                     "floor": place.get("floor", catalogue.FLOOR),
+                     "read": functools.partial(read, place, get, now, known=known)})
+    return jobs
+
+
+def run(db, jobs, now, say=print, workers=1):
+    """Run the reads and record what each found. Returns one report line a job, in the order given.
+
+    With `workers` above one, the reads are all started together, a thread each, and this waits for them in
+    order. Only the asking is done side by side; the catalogue is written here, one source at a time. So a
+    run takes as long as its slowest site, not as long as all of them added up, and no site is asked any
+    faster for it: the `get` the readers share (fetch.paced) still gives each site one request at a time."""
+    def keep(job, read):
+        return _keep(db, job["key"], job["platform"], job["source"], read, now, say, job["floor"])
+    if workers <= 1 or len(jobs) <= 1:
+        return [keep(job, job["read"]) for job in jobs]
+    with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as pool:
+        waiting = [pool.submit(job["read"]) for job in jobs]
+        return [keep(job, wait.result) for job, wait in zip(jobs, waiting)]
+
+
+def read_dealers(db, dealers, readers, get, now, say=print, workers=1):
+    """Read each dealer whose platform has a reader and record what it lists. Returns one report line a dealer.
+    Cars missing from a read are marked gone only when the reader saw the dealer's whole inventory."""
+    return run(db, dealer_jobs(dealers, readers, get, now), now, say, workers)
+
+
+def read_sources(db, places, readers, get, now, say=print, workers=1):
+    """Read each place in sources.json whose kind has a reader, and report it the way a dealer is reported."""
+    return run(db, source_jobs(db, places, readers, get, now), now, say, workers)
 
 
 def decode_vins(db, decode, now):
@@ -249,8 +279,9 @@ def main():
     (ROOT / "data").mkdir(exist_ok=True)
     db = catalogue.open_catalogue(ROOT / "data" / "catalogue.db")
 
-    get = fetch.paced()
-    report = read_sources(db, places, SOURCES, get, now) + read_dealers(db, found["dealers"], READERS, get, now)
+    get = fetch.paced(shared=ONE_COMPANY)
+    jobs = source_jobs(db, places, SOURCES, get, now) + dealer_jobs(found["dealers"], READERS, get, now)
+    report = run(db, jobs, now, workers=WORKERS)
     try:
         print(f"{decode_vins(db, vin.decode, now)} VINs decoded")
     except Exception as error:                    # vPIC being down must not cost the run its listings

@@ -1,5 +1,7 @@
 import gzip
 import io
+import threading
+import time
 import unittest
 import urllib.error
 
@@ -77,6 +79,7 @@ class Paced(unittest.TestCase):
         def sleep(seconds):
             self.slept.append(round(seconds, 1))
             self.now += seconds
+        self.sleep = sleep
         self.get = fetch.paced(lambda url, **options: url.encode(), delay=3, clock=lambda: self.now, sleep=sleep)
 
     def test_the_first_request_to_a_site_does_not_wait(self):
@@ -96,6 +99,55 @@ class Paced(unittest.TestCase):
 
     def test_it_hands_back_what_the_fetch_gave(self):
         self.assertEqual(self.get("https://a.example/1"), b"https://a.example/1")
+
+    def test_sites_named_as_one_company_share_one_clock(self):
+        get = fetch.paced(lambda url, **options: b"", delay=3, clock=lambda: self.now, sleep=self.sleep,
+                          shared=("craigslist.org",))
+        get("https://memphis.craigslist.org/search/cto")
+        get("https://www.craigslist.org/view/d/a/b")
+        get("https://jonesboro.craigslist.org/search/cto")
+        get("https://notcraigslist.org/")
+        self.assertEqual(self.slept, [3.0, 3.0])
+
+
+class PacedSideBySide(unittest.TestCase):
+    """The build asks many sites at once, a thread each: one site is still asked one request at a time."""
+
+    def test_requests_to_one_site_from_many_threads_never_overlap(self):
+        inside, most, guard = [0], [0], threading.Lock()
+
+        def slow(url, **options):
+            with guard:
+                inside[0] += 1
+                most[0] = max(most[0], inside[0])
+            time.sleep(0.005)
+            with guard:
+                inside[0] -= 1
+            return b""
+        get = fetch.paced(slow, delay=0)
+        threads = [threading.Thread(target=get, args=(f"https://a.example/{n}",)) for n in range(12)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        self.assertEqual(most[0], 1)
+
+    def test_a_site_that_is_slow_to_answer_does_not_hold_up_another(self):
+        held, answered = threading.Event(), []
+
+        def get(url, **options):
+            if "slow.example" in url:
+                held.wait(5)
+            answered.append(url)
+            return b""
+        paced = fetch.paced(get, delay=0)
+        slow = threading.Thread(target=paced, args=("https://slow.example/1",))
+        slow.start()
+        paced("https://quick.example/1")
+        self.assertEqual(answered, ["https://quick.example/1"])
+        held.set()
+        slow.join(5)
+        self.assertEqual(answered, ["https://quick.example/1", "https://slow.example/1"])
 
 
 if __name__ == "__main__":
