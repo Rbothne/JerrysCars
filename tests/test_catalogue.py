@@ -99,6 +99,55 @@ class CloseOut(unittest.TestCase):
                          [("2026-11-21T03:03", "2026-11-21T03:03"), ("2026-11-25T03:00", "2026-11-25T03:00")])
 
 
+class AgeOut(unittest.TestCase):
+    """A read that is never quite whole (Carvana's count moved under it on 2026-11-21) marks nothing gone, and a
+    read that shrank too far marks nothing gone, so without this a sold car could stay on the page for good."""
+
+    def setUp(self):
+        self.db = catalogue.open_catalogue(":memory:")
+        self.addCleanup(self.db.close)
+
+    def live(self):
+        return [row[0] for row in rows(self.db, "SELECT source_id FROM listing WHERE gone IS NULL ORDER BY source_id")]
+
+    def test_a_listing_no_read_has_found_for_three_days_is_gone(self):
+        catalogue.record(self.db, camry("old", "2026-11-21T03:00"))
+        for day in ("21", "22", "23", "24"):
+            catalogue.record(self.db, camry("kept", f"2026-11-{day}T03:00"))
+        self.assertEqual(catalogue.age_out(self.db, "craigslist", "2026-11-23T15:00"), 0)      # two and a half days
+        self.assertEqual(catalogue.age_out(self.db, "craigslist", "2026-11-24T03:00"), 1)
+        self.assertEqual(self.live(), ["kept"])
+        self.assertEqual(rows(self.db, "SELECT gone, gone_how FROM listing WHERE source_id = 'old'"),
+                         [("2026-11-24T03:00", "unseen")])
+
+    def test_nothing_ages_out_of_a_source_that_has_not_been_read_since(self):
+        catalogue.record(self.db, camry("a", "2026-11-21T03:00"))
+        catalogue.record(self.db, camry("b", "2026-11-21T03:00"))
+        self.assertEqual(catalogue.age_out(self.db, "craigslist", "2026-11-30T03:00"), 0)      # the source was down
+        self.assertEqual(self.live(), ["a", "b"])
+
+    def test_other_sources_are_left_alone(self):
+        catalogue.record(self.db, camry("old", "2026-11-21T03:00"))
+        catalogue.record(self.db, make_listing("elsewhere", "1", url="https://e/1", title="a car", seen="2026-11-21T03:00",
+                                               channel="dealer_site", price=5000))
+        catalogue.record(self.db, camry("kept", "2026-11-25T03:00"))
+        catalogue.age_out(self.db, "craigslist", "2026-11-25T03:00")
+        self.assertEqual(rows(self.db, "SELECT source, source_id FROM listing WHERE gone IS NULL ORDER BY source"),
+                         [("craigslist", "kept"), ("elsewhere", "1")])
+
+    def test_a_source_stuck_on_a_read_that_shrank_comes_unstuck(self):
+        for name in "abcdefghij":
+            catalogue.record(self.db, camry(name, "2026-11-21T03:00"))
+        for day in ("22", "23", "24"):
+            for name in "abcdef":
+                catalogue.record(self.db, camry(name, f"2026-11-{day}T03:00"))
+            with self.assertRaises(catalogue.Shrunk):
+                catalogue.close_out(self.db, "craigslist", [f"craigslist:{name}" for name in "abcdef"], f"2026-11-{day}T03:00")
+        self.assertEqual(catalogue.age_out(self.db, "craigslist", "2026-11-24T03:00"), 4)
+        self.assertEqual(catalogue.close_out(self.db, "craigslist", [f"craigslist:{name}" for name in "abcdef"],
+                                             "2026-11-24T15:00"), 0)
+
+
 class Vins(unittest.TestCase):
     def setUp(self):
         self.db = catalogue.open_catalogue(":memory:")

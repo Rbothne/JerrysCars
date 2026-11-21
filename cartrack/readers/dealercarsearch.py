@@ -1,19 +1,23 @@
-"""Dealer Car Search: independent lots. `/inventory?pagesize=100` is one HTML page of up to 100 vehicle cards.
+"""Dealer Car Search: independent lots. `/inventory?pagesize=100` is an HTML page of up to 100 vehicle cards,
+and `&page=2` the next hundred.
 
 The platform has numbered page templates whose class names differ (i08r_, i10r_, i17r_ seen so far), so this
 matches what they share: the card wrapper, the link's label, the option lines and the price. Only the box
 labelled "Retail Price" is taken as the asking price; one template shows a bare figure that turned out to be
 a down payment, and that is kept in `extra` instead. Seen working on
-901scm.com, importsofmemphis.com and victoryauto.org, 2026-11-20. A lot with exactly 100 cards on the page may
-have more behind it; reading a second page has not been tried, so that read is reported as partial."""
+901scm.com, importsofmemphis.com and victoryauto.org, 2026-11-20. No lot here has over 100 cars, so paging was
+checked small: on victoryauto.org, 2026-11-21, `pagesize=25` gave 25 cards and `&page=2` gave 25 others. Pages
+are read until one comes back short. A full page that brings nothing new means the site ignored the page
+number, and that read is reported as partial."""
 
 import html
 import re
 
-from . import NotRead, dealer_listing, drive, history, site, text
+from . import NotRead, dealer_listing, drive, every, history, site, text
 from ..listings import num
 
 PAGE = 100
+MAX_PAGES = 20
 _CARD = r'(?=<div class="[^"]*infinite-scroll-current-page)'
 _PHOTO = r"""(?:data-src|src)=['"](https://imagescdn\.dealercarsearch\.com/Media/[^'"]+)"""
 
@@ -53,8 +57,18 @@ def _listing(dealer, base, card, seen):
 
 def read(dealer, get, seen):
     base = site(dealer)
-    cards = re.split(_CARD, get(f"{base}/inventory?pagesize={PAGE}").decode("utf-8", "replace"))[1:]
-    found = [listing for listing in (_listing(dealer, base, card, seen) for card in cards) if listing]
+    found, ids, complete = [], set(), False
+    for number in range(1, MAX_PAGES + 1):
+        address = f"{base}/inventory?pagesize={PAGE}" + (f"&page={number}" if number > 1 else "")
+        cards = re.split(_CARD, get(address).decode("utf-8", "replace"))[1:]
+        fresh = [car for car in every((_listing(dealer, base, card, seen) for card in cards), dealer["host"])
+                 if car["id"] not in ids]
+        ids.update(car["id"] for car in fresh)
+        found += fresh
+        if len(cards) < PAGE:
+            complete = True                           # a short page is the last one
+        if len(cards) < PAGE or not fresh:
+            break
     if not found:
         raise NotRead(f"{dealer['host']}: no vehicle cards on /inventory")
-    return found, len(cards) < PAGE
+    return found, complete

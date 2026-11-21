@@ -20,18 +20,28 @@ from cartrack.sources import SOURCES
 
 ROOT = pathlib.Path(__file__).parent
 ONLINE = {"carvana"}                              # platforms that deliver a car instead of keeping a lot to visit
+OWN_IDS = 0.8          # a read where fewer than this share of the listings have an id of their own was read wrongly
 
 
 def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
-    """Run one read and record what it found under `source`. Returns the report line for it."""
+    """Run one read and record what it found under `source`. Returns the report line for it.
+
+    Two things a read can get wrong without failing are caught here. A reader that takes the wrong thing for
+    a listing's id gives many listings the same one, and they would overwrite each other down to a handful:
+    such a read is refused. And a read that is never quite whole, or that shrank for good, marks nothing
+    gone: so a listing no read has found for three days is let go whatever the reads called themselves."""
     line = {"dealer": key, "platform": platform, "ok": False, "read": 0, "new": 0, "gone": 0, "complete": None,
             "error": None}
     try:
         found, complete = read()
-        outcomes = [catalogue.record(db, listing) for listing in found]
-        line.update(read=len(found), new=outcomes.count("new"), complete=complete)
+        listed = {listing["id"]: listing for listing in found}
+        if len(listed) < OWN_IDS * len(found):
+            raise ValueError(f"{len(found)} listings share {len(listed)} ids")
+        outcomes = [catalogue.record(db, listing) for listing in listed.values()]
+        line.update(read=len(listed), new=outcomes.count("new"), complete=complete)
+        line["gone"] = catalogue.age_out(db, source, now)
         if complete:
-            line["gone"] = catalogue.close_out(db, source, [listing["id"] for listing in found], now, floor)
+            line["gone"] += catalogue.close_out(db, source, list(listed), now, floor)
         line["ok"] = True
     except Exception as error:                    # one source's trouble is reported, never the run's
         line["error"] = f"{type(error).__name__}: {error}"
@@ -131,12 +141,12 @@ def _engine(decoded):
 
 
 def _away(row, dealer, area):
-    """(miles from the home point, whether that came from the listing's own pin and not a dealer's lot)."""
+    """Miles from the home point: the dealer's lot, else the listing's own map pin, else unknown."""
     if dealer.get("miles") is not None:
-        return dealer["miles"], False
+        return dealer["miles"]
     if area and row["lat"] is not None and row["lon"] is not None:
-        return round(miles_between(area["home"], (row["lat"], row["lon"])), 1), True
-    return None, False
+        return round(miles_between(area["home"], (row["lat"], row["lon"])), 1)
+    return None
 
 
 def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=None):
@@ -147,29 +157,31 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
     like it ask and `similar` how many that rests on (cartrack/value.py); both are None for a car not judged.
     `total` adds the dealer's stated fees and Tennessee sales tax; `per_year` is miles for each year on the road.
 
-    `places` are the rows of sources.json and `area` the home point and radius. A car from a place carries
-    `seller` ("private"), `where` (the seller's word for the neighbourhood, else the city) and its distance
-    from its own map pin; one pinned outside the radius is left off. `title_status` is what the seller says
+    `places` are the rows of sources.json and `area` the home point. A car from a place carries `seller`
+    ("private"), `where` (the seller's word for the neighbourhood, else the city) and, as `dealer_miles`, its
+    distance from its own map pin. No car is left off for being far: the page filters by distance. A listing
+    without a VIN that two places both show (one address) is one car. `title_status` is what the seller says
     of the title. A car whose title is not clean is shown but not judged, and is not used to judge others."""
     by_key = {dealer["key"]: dealer for dealer in (*dealers, *places)}
     decodes = {vin: json.loads(row) for vin, row in db.execute("SELECT vin, row_json FROM vin_decode")}
     vehicles = {}                                 # one physical car -> the listings of it; a group lists a car on each of its sites
+    addresses = {}                                # a listing's address -> the car it was first taken for
     for row in db.execute("SELECT * FROM listing WHERE gone IS NULL AND price IS NOT NULL ORDER BY id").fetchall():
         points = [point[0] for point in db.execute(
             "SELECT price FROM price_point WHERE listing_id = ? AND price IS NOT NULL ORDER BY observed", (row["id"],))]
         first = points[0] if points else row["price"]
         drop = max(first - row["price"], 0)
         dealer = by_key.get(row["source"], {})
-        away, pinned = _away(row, dealer, area)
-        if pinned and away > area["radius_miles"]:
-            continue
+        away = _away(row, dealer, area)
         on_lot = row["channel"] == "dealer_site"
+        vehicle = row["vehicle_id"] if row["vin"] else addresses.setdefault(row["url"], row["vehicle_id"])
         photos = json.loads(row["photos"] or "[]")
         extra = json.loads(row["extra"] or "{}")
         years = max(int(now[:4]) - row["year"] + 1, 1) if row["year"] else None
         money = _money(row, extra)
-        vehicles.setdefault(row["vehicle_id"], []).append({
+        vehicles.setdefault(vehicle, []).append({
             "id": row["id"], "title": row["title"], "url": row["url"],
+            "also": [],
             "was": first + (money["fees"] or 0) if drop else None, "drop": drop,
             "cuts": sum(1 for before, after in zip(points, points[1:]) if after < before),
             "days": _days(min(row["first_seen"], row["posted"] or row["first_seen"]), now),
@@ -187,8 +199,12 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
             "dealer_miles": away, "city": row["city"], "state": row["state"],
             "photo": photos[0] if photos else None,
         })
-    cars = sorted(({**min(listed, key=lambda car: car["price"]), "places": len(listed)} for listed in vehicles.values()),
-                  key=lambda car: car["id"])
+    cars = []
+    for listed in vehicles.values():                  # shown once, where it costs least, and counted for every seller of it
+        best = min(listed, key=lambda car: car["price"])
+        others = sorted({car["dealer_key"] for car in listed} - {best["dealer_key"]})
+        cars.append({**best, "places": len(listed), "also": others})
+    cars.sort(key=lambda car: car["id"])
     by_dealer = {}
     for car in cars:
         by_dealer.setdefault(car["dealer_key"], []).append(car)
@@ -203,13 +219,27 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
         car["typical"], car["similar"] = (fair.get(name) for name in ("typical", "similar"))
     counts = {}
     for car in cars:
-        counts[car["dealer_key"]] = counts.get(car["dealer_key"], 0) + 1
+        for seller in (car["dealer_key"], *car["also"]):
+            counts[seller] = counts.get(seller, 0) + 1
     return {
         "built": now,
         "cars": cars,
         "dealers": [{"key": line["dealer"], "name": by_key.get(line["dealer"], {}).get("name"),
                      "cars": counts.get(line["dealer"], 0), "ok": line["ok"]} for line in report or []],
     }
+
+
+def funnel(db, data):
+    """For each source with live listings: how many it has, how many of those carry a usable price, and how
+    many cars on the page are its own or shared with it. A source that reads well and shows nothing looks,
+    on the page, exactly like a source with no cars; this is where the difference can be seen."""
+    shown = {}
+    for car in data["cars"]:
+        for seller in (car["dealer_key"], *car["also"]):
+            shown[seller] = shown.get(seller, 0) + 1
+    return [{"source": source, "live": live, "priced": priced, "shown": shown.get(source, 0)}
+            for source, live, priced in db.execute(
+                "SELECT source, count(*), count(price) FROM listing WHERE gone IS NULL GROUP BY source ORDER BY source")]
 
 
 def main():
@@ -229,6 +259,10 @@ def main():
 
     data = page_data(db, found["dealers"], now, report, places=places, area=found["area"])
     data["area"] = found["area"]
+    print(f"{'source':<34} {'live':>5} {'priced':>6} {'on page':>7}")
+    for line in funnel(db, data):
+        print(f"{line['source']:<34} {line['live']:5d} {line['priced']:6d} {line['shown']:7d}"
+              + ("   <- none of its cars reach the page" if line["live"] and not line["shown"] else ""))
     db.close()
     (ROOT / "site" / "data").mkdir(parents=True, exist_ok=True)
     (ROOT / "site" / "data" / "cars.json").write_text(json.dumps(data, separators=(",", ":")) + "\n", encoding="utf-8")

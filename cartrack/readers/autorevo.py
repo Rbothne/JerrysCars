@@ -6,7 +6,7 @@ peckdaniel.com, 2026-11-20, where the page held all 25 cars the sitemap listed."
 
 import re
 
-from . import NotRead, dealer_listing, drive, history, site, text
+from . import NotRead, dealer_listing, drive, every, history, site, text
 
 _CARD = '<section class="inventory_item'
 
@@ -34,7 +34,7 @@ def _listing(dealer, base, card, seen):
 def read(dealer, get, seen):
     base = site(dealer)
     cards = get(f"{base}/inventory").decode("utf-8", "replace").split(_CARD)[1:]
-    found = [listing for listing in (_listing(dealer, base, card, seen) for card in cards) if listing]
+    found = every((_listing(dealer, base, card, seen) for card in cards), dealer["host"])
     if not found:
         raise NotRead(f"{dealer['host']}: no vehicle cards on /inventory")
     try:

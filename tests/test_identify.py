@@ -88,6 +88,30 @@ class Fill(unittest.TestCase):
         self.assertEqual((row["make"], row["model"], row["trim"], row["identity_how"]), ("ford", "Expedition", "xl", "title"))
         self.assertEqual(row["vehicle_key"], "2011|ford|expedition|xl|||")
 
+    def craigslist(self, source_id, typed, title, year=2009):
+        self.add("memphis.craigslist.org", source_id, channel="classified", year=year, title=title, extra={"makemodel": typed})
+        identify.fill(self.db)
+        row = self.row(f"memphis.craigslist.org:{source_id}")
+        return row["make"], row["model"], row["trim"], row["identity_how"]
+
+    def test_when_the_typed_make_and_model_name_no_model_the_title_is_tried(self):
+        # all four seen on memphis.craigslist.org, 2026-11-21
+        self.dealer_cars()
+        self.assertEqual(self.craigslist("a", "2009", "2009 Ford Explorer XLT - AS-IS - Needs Major Work"),
+                         ("ford", "Explorer", None, "title"))
+        self.assertEqual(self.craigslist("b", "Ford", "2004 Ford Expedition"), ("ford", "Expedition", None, "title"))
+        self.assertEqual(self.craigslist("c", "Ford Exploder", "2019 Ford Explorer"), ("ford", "Explorer", None, "title"))
+        self.assertEqual(self.craigslist("d", "Explorer sport", "2008 FORD EXPLORER SPORT"), ("ford", "Explorer", None, "title"))
+
+    def test_the_typed_words_win_when_they_name_a_model(self):
+        self.dealer_cars()
+        self.assertEqual(self.craigslist("a", "ford expedition xl", "Ford Explorer, runs great"),
+                         ("ford", "Expedition", "xl", "title"))
+
+    def test_a_title_that_names_no_model_either_leaves_the_typed_make(self):
+        self.dealer_cars()
+        self.assertEqual(self.craigslist("a", "ford torino", "1976 Ford Torino", year=1976), ("ford", None, None, "source"))
+
     def test_a_listing_that_already_has_its_make_and_model_is_left_alone(self):
         self.dealer_cars()
         before = dict(self.row("lot.example:typed"))

@@ -101,6 +101,7 @@ function filters() {
     minYear: amount(data.get("minYear")),
     maxYear: amount(data.get("maxYear")),
     maxMiles: amount(data.get("maxMiles")),
+    maxAway: amount(data.get("maxAway")),
     body: data.get("body"),
     drive: data.get("drive"),
     fuel: data.get("fuel"),

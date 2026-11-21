@@ -20,7 +20,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Value | `cartrack/value.py` | What cars like each one usually ask, from the other cars in the catalogue: the lower of a price model and the car's nearest neighbours. How far to trust it is in `research/09-value.md`. |
 | Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). Title and registration are not in it. |
 | Build | `build.py` | Reads every source and every dealer that has a reader, updates the catalogue, decodes new VINs, names the listings that have only a seller's words, judges value, writes `site/data/cars.json`. |
-| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed), ascending or descending, and opens with the cars furthest under similar ones first. |
+| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: within so many miles, sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed, distance), ascending or descending, and opens with the cars furthest under similar ones first. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
 | Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. |
 
@@ -29,8 +29,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 297 Python tests
-    node --test tests/js/logic.test.mjs         # 48 page-logic tests
+    py -m unittest discover -s tests -t .       # 317 Python tests
+    node --test tests/js/logic.test.mjs         # 51 page-logic tests
 
 ## Publishing the page
 
@@ -46,21 +46,46 @@ run log and keeps its last known cars.
 
 ## Configuration
 
-- `area.json`: home point and radius. Memphis, 60 miles.
+- `area.json`: home point and radius. Memphis, 60 miles. The radius bounds dealer discovery only; distances on the page are measured from the home point, and the page's "Within (miles)" box does the limiting.
 - `dealers-seed.json`: hand-kept dealers that OpenStreetMap lacks. Add a line to add a dealer, then run `py discover.py`.
 - `dealers.json`: written by discovery and read by the build. Committed, so the scheduled build does not rediscover.
-- `sources.json`: hand-kept places that are not a dealer's website. `kind` names the reader, `site` the Craigslist city, and `floor` how far the place's listings may thin out between two reads before the read is taken as broken (0.5 for Craigslist, where listings come and go faster than on a lot; 0.8 otherwise).
+- `sources.json`: hand-kept places that are not a dealer's website. One row per Craigslist city: `kind` names the reader, `site` the city's Craigslist name, and `floor` how far the place's listings may thin out between two reads before the read is taken as broken (0.5 for Craigslist, where listings come and go faster than on a lot; 0.8 otherwise).
 
 ## Craigslist (seen 2026-11-21, from a home connection)
 
 - `https://memphis.craigslist.org/search/cto` answered the tracker's own name with 120 by-owner results in the page. Each result's address ends in a key that did not change between two reads minutes apart; that key is the listing's id here. Whether it lasts the life of a listing has not been watched yet: if it does not, every listing will look new each day.
 - Each listing's page was read once (120 requests, three seconds apart) and gave a year and a posting time for all 120, and a VIN for 8. Later runs ask only for listings they have not read, so a normal run is one request plus a few.
-- That first build put 101 of the 120 on the page (the rest had no usable price or were pinned outside the radius): 84 with a clean title, 12 rebuilt, 2 with a lien, 2 with no title, 1 for parts. 78 were named to a model the catalogue knows. Only 7 had the three similar cars a judgement needs, because private sellers' cars are older and higher-mileage than what the lots hold; 3 of those sat a tenth or more under.
-- It has not been read from GitHub's servers yet. A refusal there is reported in the run log and costs nothing else.
+- That first build put 101 of the 120 on the page (the other 19 were pinned outside the radius): 84 with a clean title, 12 rebuilt, 2 with a lien, 2 with no title, 1 for parts. 78 were named to a model the catalogue knows, and 82 once the title was tried where the typed make and model failed. Only 7 had the three similar cars a judgement needs, because private sellers' cars are older and higher-mileage than what the lots hold; 3 of those sat a tenth or more under.
+- From GitHub's servers the same day it read the same way: the run of 21:39 UTC put the same 101 cars on the published page, in twelve minutes for the whole build. A refusal there would be reported in the run log and cost nothing else.
 - Craigslist's robots.txt allows these pages; its terms of use forbid collecting listings by program without a licence.
 - Make and model are whatever the seller typed, matched to models the catalogue already knows; a make it has never seen, or a model it has never seen, stays unnamed and is not judged. An odometer of 10 to 400 on a car over three years old is read as thousands.
-- Private cars are judged against a catalogue that is almost all dealers, who ask more, so most show as under similar cars. A car pinned more than the radius from the home point is kept in the catalogue and left off the page. A car whose seller says the title is not clean is shown without a judgement.
+- Private cars are judged against a catalogue that is almost all dealers, who ask more, so most show as under similar cars. A car whose seller says the title is not clean is shown without a judgement.
+- Six more cities were added the same day, the nearest by Craigslist's own list of areas: Jonesboro (60 miles), North Mississippi (62), Jackson, TN (77), Southeast Missouri (122), Little Rock (130) and Muscle Shoals (136). Their search pages held 11, 40, 20 and 82 by-owner results for the four that were counted, and shared no listing with Memphis's page. Since then no car is left off for being far: each carries its distance from its own map pin, and the page filters and sorts by it. A listing two cities both show is one car.
+- A search page stops at about 360 results. None of these cities is near that, but a page of 300 or more is asked again in five price bands, which the page honours (`min_price=5000&max_price=10000` gave 55 results, all from $5,000 to $10,000).
 - The seller's description and phone number are not kept.
+
+## When a source has cars and the page shows none
+
+Looked for on 2026-11-21, after the storefront tracker's trouble with stores that read as empty. What was found
+here, and what now stands against it:
+
+| What went wrong | Seen | Now |
+|---|---|---|
+| A car listed by several dealers was credited only to the one whose name sorts first | INFINITI of Memphis and Gossett Motor Cars (used) showed 0 of 321 and 282 priced cars; Jim Keras Subaru 24 of 248 | Each car carries `also`, the other dealers listing it. Counts and the Source filter use it. |
+| A read that is never quite whole marks nothing gone | Carvana's count moved while its pages were fetched: 1,901 read, "partial", and 48 cars not seen since the morning stayed on the page | `catalogue.age_out`: a listing no read has found for three days is gone, whatever the reads called themselves. |
+| A read that shrank under 80% is refused on every later run too | Not seen yet; a lot that really sold a fifth of its cars would be reported failed for good | The same three days: the missing cars age out, and the next read passes. |
+| A reader that takes the wrong thing for the id gives many listings one id, and they overwrite each other | Not seen here; the storefront tracker's commonest quiet failure | A read where under 80% of the listings have an id of their own is refused and reported. |
+| The seller's make-and-model box is filled wrongly | "GMC" beside "2004 GMC Sierra 1500"; "2009" beside "2009 Chevy Impala LT"; "Ford Firsta" beside "2019 Ford Fiesta" | The title is tried when those words name no model. |
+| A source reads well and shows nothing, which looks like a source with no cars | Imports of Memphis: 29 read, no asking prices | The build prints, for every source, live listings, how many are priced and how many reach the page, and marks the ones where none do. |
+
+Three gaps found in the same review were closed the same day. Dealer Car Search read only its first 100 cars:
+it now follows `&page=2` and on until a page comes back short (checked on victoryauto.org with a page size of
+25). A Craigslist page cut short at about 360 results is asked again in price bands. And AutoRevo, Dealer Car
+Search and Craigslist refuse a page where fewer than 80% of the cards or results give a listing, so a renamed
+link cannot pass for a nearly empty lot even on a first read.
+
+Still open: the readers that take a JSON feed drop a car they cannot make a listing of without saying so. They
+compare what they read with the feed's own count, so such a read is reported as partial, not refused.
 
 ## How discovery places a dealer
 
@@ -93,7 +118,7 @@ Known limits:
 - The catalogue keeps the asking price before the dealer's fees, and the fees beside it in `extra.fees`. The page shows the two added together, because dealers differ: Jim Keras advertises the price with its $899 fee in it, Jimmy Gray shows its $425 fee apart. A dealer that states no fee is shown at its asking price, marked "dealer fee not stated".
 - Dealer.com (six sites) and Dealer Inspire (two) refuse plain requests and have no reader.
 - Landers Used (Dealer eProcess) and Supercars Autosales (Dealer Car Search) are behind a Cloudflare challenge on every page. A route through a visible browser was found for both and is not part of the build: `research/08-routing-dealereprocess.md`, `research/08-routing-unknowns.md`. `cartrack/readers/dealereprocess.py` is written and tested but not registered.
-- The Jim Keras sites, and the Gossett sites, list many of the same cars. The page shows each car once, by VIN, at its lowest price.
+- The Jim Keras sites, and the Gossett sites, list many of the same cars. The page shows each car once, by VIN, at its lowest price, and counts it for every dealer that lists it: choosing any of them under Source finds it.
 - Some sites turn away particular user agents: Carsforsale.com answers "python-urllib" with a false 500, and the Team Velocity sites answer 406 without "Mozilla/5.0". The readers say which name they send.
 - Car Choice's website is gone, and King Cotton Ford is now Landers Ford North, on Dealer.com.
 
@@ -115,8 +140,8 @@ Seen on the build of 2026-11-21 (3,602 cars):
 ## Not built yet
 
 - Readers for the city impound auction, government surplus and lenders' repossessions, and the Facebook extension.
-- Craigslist sites beyond Memphis, its by-dealer listings, and reposts of one car under a new listing.
+- Craigslist's by-dealer listings, and reposts of one car under a new listing.
 - Linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
 - A net figure after tax, title and repairs, and how fast each model sells. Price-cut ordering needs a few days of history to mean anything.
 
-Research behind these choices is in `research/`, numbered 01 to 09.
+Research behind these choices is in `research/`, numbered 01 to 10. The three numbered 10 are where impounded, government and repossessed cars around Memphis are sold and which of those places can be read: the city's weekly impound auction is the one that matters, with every lot's VIN and hammer price on plain pages.

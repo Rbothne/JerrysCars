@@ -19,6 +19,20 @@ class NotRead(Exception):
     """The dealer's site answered, but not with an inventory this reader understands."""
 
 
+CARDS_READ = 0.8       # a page where fewer than this share of the cards gave a listing has changed under the reader
+
+
+def every(made, where):
+    """The listings in `made`, which holds None for each card that gave none (no id, no title). Raises NotRead
+    when too few cards gave one: a site that renames what the reader takes for the id would otherwise go on
+    reading as a lot with a handful of cars, and a first read has no earlier count to be measured against."""
+    made = list(made)
+    found = [listing for listing in made if listing]
+    if len(found) < CARDS_READ * len(made):
+        raise NotRead(f"{where}: only {len(found)} of {len(made)} cards could be read")
+    return found
+
+
 def site(dealer):
     """The dealer's own address, scheme and host only. Without a full website address, "www." is assumed."""
     parts = urllib.parse.urlparse(dealer.get("website") or "")

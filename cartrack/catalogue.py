@@ -3,6 +3,7 @@
 History follows the wishlist site's history.py: a price point is added only when something changed, a
 listing keeps the first and last time it was seen, and "gone" is only decided by a whole read of its source."""
 
+import datetime
 import json
 import sqlite3
 
@@ -139,6 +140,7 @@ _DEALER_FIELDS = (
 _IDENTITY = ("year", "make", "model", "trim", "body", "drive", "engine", "fuel", "transmission")
 
 FLOOR = 0.8            # a read that found fewer than this share of a source's live listings is taken as broken
+UNSEEN_DAYS = 3        # a listing no read has found for this long is gone, whatever the reads called themselves
 
 
 class Shrunk(Exception):
@@ -218,6 +220,22 @@ def close_out(db, source, seen_ids, when, floor=FLOOR):
     with db:
         db.executemany("UPDATE listing SET gone = ?, gone_how = 'unseen' WHERE id = ?", [(when, key) for key in missing])
     return len(missing)
+
+
+def age_out(db, source, when, days=UNSEEN_DAYS):
+    """Mark `source`'s live listings gone when no read has found them for `days`, though reads since have found
+    others. Returns how many. close_out decides "gone" only from a whole read that did not shrink, and some
+    reads are never quite whole (a count that moves while the pages are fetched, a second page never asked
+    for) or shrink for good (a lot that sold half its cars); this is what lets those listings go. A source
+    not read at all in that time keeps everything: its silence says nothing about its cars.
+    Do not call it for a source whose list is cut short by design, where an old listing drops off the end
+    while still for sale."""
+    cutoff = (datetime.datetime.fromisoformat(when) - datetime.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M")
+    with db:
+        return db.execute(
+            "UPDATE listing SET gone = ?, gone_how = 'unseen' WHERE source = ? AND gone IS NULL AND last_seen <= ? "
+            "AND EXISTS (SELECT 1 FROM listing fresh WHERE fresh.source = ? AND fresh.last_seen > ?)",
+            (when, source, cutoff, source, cutoff)).rowcount
 
 
 def undecoded(db):

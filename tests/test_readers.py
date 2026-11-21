@@ -167,6 +167,14 @@ class AutoRevo(unittest.TestCase):
         with self.assertRaises(readers.NotRead):
             self.read({self.INVENTORY: b"<html>maintenance</html>", self.SITEMAP: "autorevo_sitemap.xml"})
 
+    def test_a_page_whose_cards_mostly_cannot_be_read_is_an_error(self):
+        page = (FIXTURES / "autorevo_inventory.html").read_text(encoding="utf-8")
+        empty = '<section class="inventory_item"><p>a card in some new layout</p></section>'
+        with self.assertRaises(readers.NotRead) as raised:
+            self.read({self.INVENTORY: page.replace("</body>", empty * 9 + "</body>").encode(),
+                       self.SITEMAP: "autorevo_sitemap.xml"})
+        self.assertIn("only 2 of 11 cards", str(raised.exception))
+
 
 class Pasts(unittest.TestCase):
     """What the first three readers keep beyond the car itself."""
@@ -243,13 +251,40 @@ class DealerCarSearch(unittest.TestCase):
         self.assertEqual((q7["year"], q7["make"], q7["model"], q7["trim"]), (2008, "audi", "Q7", "quattro 4dr 3.6L Premium"))
         self.assertEqual((q7["price"], q7["miles"], q7["vin"], q7["transmission"]), (7995, 112270, "WA1BY74L68D061656", None))
 
-    def test_a_full_page_of_100_may_have_more_behind_it(self):
+    def cards(self, first, count):
+        """A page of `count` cards made from the fixture's first, numbered from `first`."""
         page = (FIXTURES / "dealercarsearch_inventory.html").read_text(encoding="utf-8")
         card = '<div class="invMainCell' + page.split('<div class="invMainCell')[1]
-        many = "".join(card.replace("23721083", str(30000000 + n)) for n in range(100))
-        found, complete = self.read({self.INVENTORY: f"<html><body>{many}</body></html>".encode()})
-        self.assertEqual(len(found), 100)
-        self.assertFalse(complete)
+        return ("<html><body>" + "".join(card.replace("23721083", str(first + n)) for n in range(count))
+                + "</body></html>").encode()
+
+    def test_a_full_page_of_100_is_followed_by_the_next_until_one_comes_back_short(self):
+        # victoryauto.org, 2026-11-21: pagesize=25 gave 25 cards and &page=2 gave 25 others
+        found, complete = self.read({self.INVENTORY: self.cards(30000000, 100),
+                                     self.INVENTORY + "&page=2": self.cards(30000100, 100),
+                                     self.INVENTORY + "&page=3": self.cards(30000200, 7)})
+        self.assertEqual(self.get.asked, [self.INVENTORY, self.INVENTORY + "&page=2", self.INVENTORY + "&page=3"])
+        self.assertEqual((len(found), len({car["id"] for car in found})), (207, 207))
+        self.assertTrue(complete)
+
+    def test_a_lot_of_exactly_100_is_whole_once_the_next_page_comes_back_empty(self):
+        found, complete = self.read({self.INVENTORY: self.cards(30000000, 100),
+                                     self.INVENTORY + "&page=2": b"<html><body>No vehicles</body></html>"})
+        self.assertEqual((len(found), complete), (100, True))
+
+    def test_a_site_that_ignores_the_page_number_is_not_a_whole_read(self):
+        same = self.cards(30000000, 100)
+        found, complete = self.read({self.INVENTORY: same, self.INVENTORY + "&page=2": same})
+        self.assertEqual((len(found), complete), (100, False))
+
+    def test_a_page_whose_cards_mostly_have_no_id_is_an_error(self):
+        # the storefront tracker's lesson: a renamed link reads as a nearly empty shop, not as a failure
+        page = (FIXTURES / "dealercarsearch_inventory.html").read_text(encoding="utf-8")
+        card = '<div class="invMainCell' + page.split('<div class="invMainCell')[1]
+        broken = card.replace('href="/vdp/', 'href="/vehicle/')
+        with self.assertRaises(readers.NotRead) as raised:
+            self.read({self.INVENTORY: f"<html><body>{card}{broken * 5}</body></html>".encode()})
+        self.assertIn("only 1 of 6 cards", str(raised.exception))
 
     def test_a_page_with_no_cars_is_an_error(self):
         with self.assertRaises(readers.NotRead):

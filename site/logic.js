@@ -89,7 +89,8 @@ function sought(text, cars) {
 }
 
 /** The cars that pass every filter set in `filters`: text, make, model, minPrice, maxPrice, minYear, maxYear,
- *  maxMiles, body, drive ("four" or "two"), fuel, dealer, seller ("private" or "dealer"), localOnly, droppedOnly,
+ *  maxMiles, maxAway (miles from home; a car whose distance is not known stays), body, drive ("four" or "two"),
+ *  fuel, dealer, seller ("private" or "dealer"), localOnly, droppedOnly,
  *  underOnly, oneOwnerOnly, certifiedOnly, historyOnly, cleanOnly (hides a car whose seller names a title that
  *  is not clean; a car that says nothing of its title stays). */
 export function visible(cars, filters) {
@@ -103,10 +104,11 @@ export function visible(cars, filters) {
     if (filters.minYear && !(car.year >= filters.minYear)) return false;
     if (filters.maxYear && !(car.year <= filters.maxYear)) return false;
     if (filters.maxMiles && (car.miles == null || car.miles > filters.maxMiles)) return false;
+    if (filters.maxAway && car.dealer_miles != null && car.dealer_miles > filters.maxAway) return false;
     if (filters.body && car.body !== filters.body) return false;
     if (filters.drive && !(DRIVES[filters.drive] || []).includes(car.drive)) return false;
     if (filters.fuel && car.fuel !== filters.fuel) return false;
-    if (filters.dealer && car.dealer_key !== filters.dealer) return false;
+    if (filters.dealer && car.dealer_key !== filters.dealer && !(car.also || []).includes(filters.dealer)) return false;
     if (filters.seller && car.seller !== filters.seller) return false;
     if (filters.cleanOnly && car.title_status && car.title_status !== "clean") return false;
     if (filters.localOnly && car.kind === "online") return false;
@@ -131,11 +133,12 @@ const figures = {
   miles: (car) => car.miles ?? null,
   peryear: (car) => car.per_year ?? null,
   days: (car) => car.days ?? null,
+  away: (car) => car.dealer_miles ?? null,
 };
 
 /** The direction each field starts in: the one a buyer usually wants (cheapest, newest, biggest cut). */
 export const DIRECTIONS = { value: "desc", price: "asc", drop: "desc", share: "desc",
-  year: "desc", miles: "asc", peryear: "asc", days: "asc" };
+  year: "desc", miles: "asc", peryear: "asc", days: "asc", away: "asc" };
 
 /** A new list ordered by the field `how`, "asc" or "desc" (the field's own direction when not given).
  *  Cars that tie keep the order they came in; cars that lack the figure go last. */

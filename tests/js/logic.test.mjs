@@ -142,7 +142,7 @@ test("cars that tie keep the order they came in, whichever way the order runs", 
 
 test("each field starts in the direction a buyer usually wants", () => {
   assert.deepEqual(DIRECTIONS, { value: "desc", price: "asc", drop: "desc", share: "desc",
-    year: "desc", miles: "asc", peryear: "asc", days: "asc" });
+    year: "desc", miles: "asc", peryear: "asc", days: "asc", away: "asc" });
 });
 
 test("lowest price first", () => {
@@ -259,4 +259,27 @@ test("clean titles only leaves out a car whose seller names another title, and k
   const clean = { ...camry, id: "p:3", seller: "private", title_status: "clean" };
   assert.deepEqual(ids(visible([rebuilt, clean, f150], { cleanOnly: true })), ["p:3", "b:2"]);
   assert.deepEqual(ids(visible([rebuilt, clean, f150], {})), ["p:2", "p:3", "b:2"]);
+});
+
+test("a dealer's cars include the ones shown under another dealer that lists them too", () => {
+  const shared = { ...camry, id: "a:9", dealer_key: "a", also: ["b", "c"] };
+  assert.deepEqual(ids(visible([shared, f150, cruze], { dealer: "c" })), ["a:9"]);
+  assert.deepEqual(ids(visible([shared, f150, cruze], { dealer: "b" })), ["a:9", "b:2", "b:3"]);
+  assert.deepEqual(ids(visible([shared, f150, cruze], { dealer: "a" })), ["a:9"]);
+});
+
+test("within so many miles leaves out cars known to be farther, and keeps one whose distance is not known", () => {
+  const near = { ...camry, id: "n", dealer_miles: 12.4 };
+  const far = { ...camry, id: "f", dealer_miles: 113.1 };
+  const delivered = { ...camry, id: "d", dealer_miles: null };
+  assert.deepEqual(ids(visible([near, far, delivered], { maxAway: 60 })), ["n", "d"]);
+  assert.deepEqual(ids(visible([near, far, delivered], { maxAway: 0 })), ["n", "f", "d"]);
+});
+
+test("nearest first, cars of unknown distance last", () => {
+  const near = { ...camry, id: "n", dealer_miles: 12.4 };
+  const far = { ...camry, id: "f", dealer_miles: 113.1 };
+  const delivered = { ...camry, id: "d", dealer_miles: null };
+  assert.deepEqual(ids(sorted([far, delivered, near], "away")), ["n", "f", "d"]);
+  assert.equal(DIRECTIONS.away, "asc");
 });

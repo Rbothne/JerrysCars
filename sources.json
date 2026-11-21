@@ -1,3 +1,9 @@
 [
- {"key": "memphis.craigslist.org", "kind": "craigslist", "site": "memphis", "name": "Craigslist, by owner", "floor": 0.5}
+ {"key": "memphis.craigslist.org", "kind": "craigslist", "site": "memphis", "name": "Craigslist: Memphis", "floor": 0.5},
+ {"key": "jonesboro.craigslist.org", "kind": "craigslist", "site": "jonesboro", "name": "Craigslist: Jonesboro", "floor": 0.5},
+ {"key": "northmiss.craigslist.org", "kind": "craigslist", "site": "northmiss", "name": "Craigslist: North Mississippi", "floor": 0.5},
+ {"key": "jacksontn.craigslist.org", "kind": "craigslist", "site": "jacksontn", "name": "Craigslist: Jackson, TN", "floor": 0.5},
+ {"key": "semo.craigslist.org", "kind": "craigslist", "site": "semo", "name": "Craigslist: Southeast Missouri", "floor": 0.5},
+ {"key": "littlerock.craigslist.org", "kind": "craigslist", "site": "littlerock", "name": "Craigslist: Little Rock", "floor": 0.5},
+ {"key": "shoals.craigslist.org", "kind": "craigslist", "site": "shoals", "name": "Craigslist: Muscle Shoals", "floor": 0.5}
 ]

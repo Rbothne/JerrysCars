@@ -9,7 +9,12 @@ model that starts with it. Whatever follows the model is kept as trim.
 
 A make the catalogue has never seen names nothing, and a known make with an unknown model names only the
 make: such a car has no similar cars to be judged against anyway. Both are tried again on every build, as
-the catalogue learns more models."""
+the catalogue learns more models.
+
+The box sellers type the make and model into is often filled wrongly: just "GMC", just the year again, the
+model without its make ("G8 GT"), a misspelling ("Ford Firsta") beside a title that spells it right. So when
+those words name no model, the listing's title is tried the same way, the year at its front aside. A title
+runs on into "AS-IS, needs work", so nothing after the model is kept as trim when the name came from one."""
 
 import json
 import re
@@ -52,6 +57,12 @@ def named(typed, known):
     return {"make": make, "model": None, "trim": None}
 
 
+def _untitled(title):
+    """A listing's title as words to name it from: punctuation aside, and without the year sellers put first."""
+    words = re.sub(r"[^a-z0-9\s-]", " ", (title or "").lower()).split()
+    return " ".join(words[1:] if words and re.fullmatch(r"(19|20)\d\d|\d\d", words[0]) else words)
+
+
 def known_models(db):
     """{make: {model: how many listings}} for every make and model a decoded VIN has named."""
     known = {}
@@ -66,12 +77,16 @@ def fill(db):
     """Name every listing that has the seller's words (`extra.makemodel`) and lacks a make or a model.
     Returns how many listings it changed."""
     known = known_models(db)
-    rows = db.execute("SELECT id, year, make, model, trim, body, drive, engine, extra FROM listing "
+    rows = db.execute("SELECT id, title, year, make, model, trim, body, drive, engine, extra FROM listing "
                       "WHERE (make IS NULL OR model IS NULL) AND extra LIKE '%\"makemodel\"%'").fetchall()
     changed = 0
     with db:
         for row in rows:
             found = named(json.loads(row["extra"]).get("makemodel"), known)
+            if not (found and found["model"]):
+                titled = named(_untitled(row["title"]), known)
+                if titled and (titled["model"] or not found):
+                    found = {**titled, "trim": None}
             if not found or (found["make"], found["model"]) == (row["make"], row["model"]):
                 continue
             trim = found["trim"] or row["trim"]

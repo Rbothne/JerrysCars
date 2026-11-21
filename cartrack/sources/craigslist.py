@@ -16,6 +16,10 @@ Sellers type the odometer in thousands often enough to matter ("180" on a 2011).
 years old, 10 to 400 is read as thousands and anything else under 1,000 is left blank; `extra.odometer`
 keeps what was typed whenever it was not taken as it stood.
 
+The search page stops at about 360 results. A site with that many is asked again in price bands (the page
+honours `min_price` and `max_price`, both ends included: seen 2026-11-21), so every listing is still seen and
+the read is whole unless one band alone is as long as the page.
+
 robots.txt allows /search and /view. Craigslist's terms of use forbid collecting its listings by program
 without a licence; this reads one search page a run and each listing once, at the build's three-second pace.
 Seen working on memphis.craigslist.org, 2026-11-21: 120 results on the page, 13 listing pages read."""
@@ -26,27 +30,48 @@ import re
 
 from .. import fetch
 from ..listings import make_listing, num
-from ..readers import NotRead, drive, text
+from ..readers import CARDS_READ, NotRead, drive, text
 
 MAX_DETAILS = 150      # listing pages asked for in one run; the rest wait for the next
 FULL_PAGE = 300        # the search page stops somewhere past this many results, so a page this long may be cut short
 OLD = 3                # years after which an odometer under 1,000 is not believed as typed
+BANDS = ((None, 2999), (3000, 5999), (6000, 9999), (10000, 19999), (20000, None))     # dollars, both ends included
 _TITLES = {"clean": "clean", "salvage": "salvage", "rebuilt": "rebuilt", "parts only": "parts_only",
            "lien": "lien", "missing": "missing"}
 _FAILED = (OSError, ValueError)                    # a listing page that would not load, or made no sense
 
 
-def _results(page):
-    """The search page's results, in its order: key, url, title, price and the seller's word for the place."""
-    rows = []
-    for item in re.findall(r'<li class="cl-static-search-result"[^>]*>(.*?)</li>', page, re.S):
-        link = re.search(r'href="(https://[^"]+/([^/"]+))"', item)
+def _results(page, host):
+    """The search page's results, in its order: key, url, title, price and the seller's word for the place.
+    Raises NotRead when most results give no listing address: the page has changed, and the few that still
+    match are not the site's cars."""
+    rows, items = [], re.findall(r'<li class="cl-static-search-result"[^>]*>(.*?)</li>', page, re.S)
+    for item in items:
+        link = re.search(r'href="(https://[^"]+/view/d/[^"]*/([^/"]+))"', item)
         if not link:
             continue
         part = {name: text(match.group(1)) if match else None for name, match in (
             (name, re.search(rf'<div class="{name}">(.*?)</div>', item, re.S)) for name in ("title", "price", "location"))}
         rows.append({"key": link.group(2), "url": link.group(1), **part})
+    if len(rows) < CARDS_READ * len(items):
+        raise NotRead(f"{host}: only {len(rows)} of {len(items)} results name a listing")
     return rows
+
+
+def _search(get, host, full_page):
+    """(every result of the site's by-owner search, whether that is all of them)."""
+    address = f"https://{host}/search/cto"
+    rows = _results(get(address).decode("utf-8", "replace"), host)
+    if len(rows) < full_page:
+        return rows, True
+    by_key, whole = {row["key"]: row for row in rows}, True
+    for low, high in BANDS:                           # the page was cut short: ask again a price band at a time
+        bounds = [f"{name}={value}" for name, value in (("min_price", low), ("max_price", high)) if value is not None]
+        band = _results(get(f"{address}?{'&'.join(bounds)}").decode("utf-8", "replace"), host)
+        whole = whole and len(band) < full_page
+        for row in band:
+            by_key.setdefault(row["key"], row)
+    return list(by_key.values()), whole
 
 
 def _utc(stamp):
@@ -107,7 +132,7 @@ def _details(page, this_year):
 
 def read(place, get, seen, known=(), limit=MAX_DETAILS, full_page=FULL_PAGE):
     host = f"{place['site']}.craigslist.org"
-    rows = _results(get(f"https://{host}/search/cto").decode("utf-8", "replace"))
+    rows, whole = _search(get, host, full_page)
     if not rows:
         raise NotRead(f"{host}: no results on /search/cto")
     found, asked, slowed = [], 0, False
@@ -131,4 +156,4 @@ def read(place, get, seen, known=(), limit=MAX_DETAILS, full_page=FULL_PAGE):
             channel="classified", seller_type="private", extra=extra, **facts)
         if listing:
             found.append(listing)
-    return found, len(rows) < full_page
+    return found, whole

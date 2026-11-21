@@ -76,6 +76,35 @@ class ReadDealers(unittest.TestCase):
         self.assertEqual({name: report[0][name] for name in ("dealer", "ok", "read", "new", "gone")},
                          {"dealer": "peckdaniel.com", "ok": True, "read": 2, "new": 2, "gone": 0})
 
+    def test_a_car_no_read_has_found_for_three_days_is_gone_though_no_read_was_whole(self):
+        # Carvana, 2026-11-21: 1,901 read against a count that moved, so "partial", and 48 sold cars stayed up
+        self.run_build([PECK], {"autorevo": reader("1", "2", complete=False)})
+        for day in ("22", "23"):
+            report = self.run_build([PECK], {"autorevo": reader("1", complete=False)}, now=f"2026-11-{day}T05:00")
+            self.assertEqual((len(self.live()), report[0]["gone"]), (2, 0))
+        report = self.run_build([PECK], {"autorevo": reader("1", complete=False)}, now="2026-11-24T05:00")
+        self.assertEqual((self.live(), report[0]["gone"]), (["peckdaniel.com:1"], 1))
+
+    def test_a_dealer_whose_lot_really_shrank_is_believed_after_three_days(self):
+        self.run_build([PECK], {"autorevo": reader(*"123456789")})
+        for day in ("22", "23"):
+            report = self.run_build([PECK], {"autorevo": reader("1")}, now=f"2026-11-{day}T05:00")
+            self.assertEqual((report[0]["ok"], len(self.live())), (False, 9))
+        report = self.run_build([PECK], {"autorevo": reader("1")}, now="2026-11-24T05:00")
+        self.assertEqual((report[0]["ok"], report[0]["gone"], self.live()), (True, 8, ["peckdaniel.com:1"]))
+
+    def test_a_read_whose_listings_mostly_share_an_id_is_refused(self):
+        # the storefront tracker's lesson: a grid read with the wrong id gives every tile the same one
+        self.run_build([PECK], {"autorevo": reader("1", "2", "3")})
+        report = self.run_build([PECK], {"autorevo": reader("7", "7", "7", "7", "7", "8")}, now="2026-11-22T05:00")
+        self.assertEqual(report[0]["ok"], False)
+        self.assertIn("6 listings share 2 ids", report[0]["error"])
+        self.assertEqual(self.live(), ["peckdaniel.com:1", "peckdaniel.com:2", "peckdaniel.com:3"])
+
+    def test_a_stray_repeat_among_many_listings_is_let_through(self):
+        report = self.run_build([PECK], {"autorevo": reader("1", "2", "3", "4", "5", "6", "7", "8", "9", "9")})
+        self.assertEqual((report[0]["ok"], report[0]["read"], len(self.live())), (True, 9, 9))
+
 
 CRAIGSLIST = {"key": "memphis.craigslist.org", "kind": "craigslist", "site": "memphis", "name": "Craigslist, by owner"}
 AREA = {"name": "Memphis, TN", "home": [35.1495, -90.0490], "radius_miles": 60}
@@ -365,11 +394,22 @@ class PageData(unittest.TestCase):
         catalogue.record(self.db, detailed("a", city="Cordova", state="TN"))
         self.assertEqual(self.shown()[0]["where"], "Cordova")
 
-    def test_a_private_car_pinned_outside_the_area_is_left_off_the_page(self):
+    def test_a_private_car_far_away_is_shown_with_how_far_and_left_to_the_pages_filter(self):
         catalogue.record(self.db, detailed("near", lat=35.0312, lon=-89.8124))
         catalogue.record(self.db, detailed("far", lat=33.5162, lon=-90.1795))          # Greenwood, Mississippi
         catalogue.record(self.db, detailed("unpinned"))
-        self.assertEqual([one["id"] for one in self.shown()], ["memphis.craigslist.org:near", "memphis.craigslist.org:unpinned"])
+        self.assertEqual([(one["id"], one["dealer_miles"]) for one in self.shown()],
+                         [("memphis.craigslist.org:far", 113.1), ("memphis.craigslist.org:near", 15.7),
+                          ("memphis.craigslist.org:unpinned", None)])
+
+    def test_one_listing_that_two_craigslist_cities_both_show_is_one_car(self):
+        jonesboro = {"key": "jonesboro.craigslist.org", "kind": "craigslist", "site": "jonesboro", "name": "Craigslist: Jonesboro"}
+        catalogue.record(self.db, detailed("abc"))
+        catalogue.record(self.db, {**detailed("abc"), "id": "jonesboro.craigslist.org:abc", "source": "jonesboro.craigslist.org"})
+        catalogue.record(self.db, detailed("other"))
+        shown = build.page_data(self.db, [], NOW, places=[CRAIGSLIST, jonesboro], area=AREA)["cars"]
+        self.assertEqual([(one["source_id"] if "source_id" in one else one["id"], one["places"], one["also"]) for one in shown],
+                         [("jonesboro.craigslist.org:abc", 2, ["memphis.craigslist.org"]), ("memphis.craigslist.org:other", 1, [])])
 
     def test_days_listed_counts_from_when_the_seller_posted(self):
         catalogue.record(self.db, detailed("a", "2026-11-21T05:00", posted="2026-11-18T23:30"))
@@ -395,6 +435,29 @@ class PageData(unittest.TestCase):
         self.assertEqual(data["dealers"], [
             {"key": "peckdaniel.com", "name": "Peck Daniel Auto Sales", "cars": 1, "ok": True},
             {"key": "memphis.craigslist.org", "name": "Craigslist, by owner", "cars": 1, "ok": True}])
+
+    def test_a_car_on_two_dealers_sites_counts_for_both_and_says_where_else_it_is(self):
+        # 2026-11-21: Gossett's three sites list one pool of cars, and two of the three showed no cars at all
+        catalogue.record(self.db, car("peckdaniel.com", "1", vin="1HGCM82633A004352", price=6500))
+        catalogue.record(self.db, car("jimkerasnissan.com", "9", vin="1HGCM82633A004352", price=6500))
+        catalogue.record(self.db, car("jimkerasnissan.com", "8"))
+        data = build.page_data(self.db, [PECK, KERAS], NOW, report=[
+            {"dealer": "peckdaniel.com", "ok": True}, {"dealer": "jimkerasnissan.com", "ok": True}])
+        self.assertEqual([(one["id"], one["places"], one["also"]) for one in data["cars"]],
+                         [("jimkerasnissan.com:8", 1, []), ("jimkerasnissan.com:9", 2, ["peckdaniel.com"])])
+        self.assertEqual([(dealer["key"], dealer["cars"]) for dealer in data["dealers"]],
+                         [("peckdaniel.com", 1), ("jimkerasnissan.com", 2)])
+
+    def test_the_funnel_says_how_many_of_each_sources_listings_reach_the_page(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        catalogue.record(self.db, car("peckdaniel.com", "2", price=None))
+        catalogue.record(self.db, car("jimkerasnissan.com", "9", price=None))      # Imports of Memphis: no asking prices
+        catalogue.record(self.db, detailed("far", lat=33.5162, lon=-90.1795))        # far, and on the page all the same
+        data = build.page_data(self.db, [PECK, KERAS], NOW, places=[CRAIGSLIST], area=AREA)
+        self.assertEqual(build.funnel(self.db, data), [
+            {"source": "jimkerasnissan.com", "live": 1, "priced": 0, "shown": 0},
+            {"source": "memphis.craigslist.org", "live": 1, "priced": 1, "shown": 1},
+            {"source": "peckdaniel.com", "live": 2, "priced": 1, "shown": 1}])
 
     def test_the_page_says_when_it_was_built_and_what_was_read(self):
         catalogue.record(self.db, car("peckdaniel.com", "1"))
