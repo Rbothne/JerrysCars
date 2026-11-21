@@ -16,7 +16,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Value | `cartrack/value.py` | What cars like each one usually ask, from the other cars in the catalogue: the lower of a price model and the car's nearest neighbours. How far to trust it is in `research/09-value.md`. |
 | Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). Title and registration are not in it. |
 | Build | `build.py` | Reads every dealer that has a reader, updates the catalogue, decodes new VINs, judges value, writes `site/data/cars.json`. |
-| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the filtering and ordering: make, model, price, year, mileage, body, drive, fuel, dealer, local lots only, price cuts only, below typical price only. Opens in best-value order. |
+| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the filtering and ordering: make, model, price, year, mileage, body, drive, fuel, dealer, local lots only, price cuts only, below typical price only. Sorts by one field (value, price, cost, price cut, year, mileage, miles a year, days listed), ascending or descending, and opens with the cars furthest under similar ones first. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
 | Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. |
 
@@ -26,7 +26,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
     py -m unittest discover -s tests -t .       # 249 Python tests
-    node --test tests/js/logic.test.mjs         # 30 page-logic tests
+    node --test tests/js/logic.test.mjs         # 34 page-logic tests
 
 ## Publishing the page
 

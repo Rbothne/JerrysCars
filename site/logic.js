@@ -43,24 +43,34 @@ export function visible(cars, filters) {
   });
 }
 
-const last = Number.POSITIVE_INFINITY;          // where a car with no mileage goes when sorting by mileage
 const share = (car) => (car.drop && car.was ? car.drop / car.was : 0);
-const value = (car) => (car.typical ? (car.typical - car.price) / car.typical : -last);   // never judged: last
 
-const orders = {
-  value: (a, b) => value(b) - value(a) || 0,    // two cars never judged tie (their difference is not a number)
-  drop: (a, b) => b.drop - a.drop,
-  share: (a, b) => share(b) - share(a),
-  new: (a, b) => a.days - b.days,
-  old: (a, b) => b.days - a.days,
-  price: (a, b) => a.price - b.price,
-  miles: (a, b) => (a.miles ?? last) - (b.miles ?? last),
-  year: (a, b) => (b.year || 0) - (a.year || 0),
-  peryear: (a, b) => (a.per_year ?? last) - (b.per_year ?? last) || 0,
-  total: (a, b) => (a.total ?? a.price) - (b.total ?? b.price),
+// What each sort field measures. Null means the car lacks the figure, and it then goes last either way.
+const figures = {
+  value: (car) => (car.typical ? (car.typical - car.price) / car.typical : null),
+  price: (car) => car.price,
+  total: (car) => car.total ?? car.price,
+  drop: (car) => car.drop || 0,
+  share,
+  year: (car) => car.year ?? null,
+  miles: (car) => car.miles ?? null,
+  peryear: (car) => car.per_year ?? null,
+  days: (car) => car.days ?? null,
 };
 
-/** A new list in the order named by `how`; cars that tie keep the order they came in. */
-export function sorted(cars, how) {
-  return [...cars].sort(orders[how] || orders.value);
+/** The direction each field starts in: the one a buyer usually wants (cheapest, newest, biggest cut). */
+export const DIRECTIONS = { value: "desc", price: "asc", total: "asc", drop: "desc", share: "desc",
+  year: "desc", miles: "asc", peryear: "asc", days: "asc" };
+
+/** A new list ordered by the field `how`, "asc" or "desc" (the field's own direction when not given).
+ *  Cars that tie keep the order they came in; cars that lack the figure go last. */
+export function sorted(cars, how, direction) {
+  const field = figures[how] ? how : "value";
+  const figure = figures[field];
+  const turn = (direction || DIRECTIONS[field]) === "desc" ? -1 : 1;
+  return [...cars].sort((a, b) => {
+    const [left, right] = [figure(a), figure(b)];
+    if (left == null || right == null) return (left == null) - (right == null);
+    return turn * (left - right);
+  });
 }

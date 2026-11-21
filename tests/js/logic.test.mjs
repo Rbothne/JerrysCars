@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { amount, sorted, under, visible } from "../../site/logic.js";
+import { DIRECTIONS, amount, sorted, under, visible } from "../../site/logic.js";
 
 const camry = { id: "a:1", title: "2012 Toyota Camry LE", make: "toyota", model: "Camry", year: 2012, body: "sedan", drive: "fwd", fuel: "hybrid", kind: "lot",
   price: 6500, was: null, drop: 0, miles: 134200, days: 4, dealer_key: "a", typical: 8000, similar: 6 };
@@ -51,9 +51,32 @@ test("biggest cut as a share of the first price", () => {
   assert.deepEqual(ids(sorted([f150, small], "share")), ["c:9", "b:2"]);
 });
 
-test("newest first and longest listed first", () => {
-  assert.deepEqual(ids(sorted(cars, "new")), ["a:1", "b:3", "b:2"]);
-  assert.deepEqual(ids(sorted(cars, "old")), ["b:2", "b:3", "a:1"]);
+test("days listed runs newest first, and longest first when turned round", () => {
+  assert.deepEqual(ids(sorted(cars, "days")), ["a:1", "b:3", "b:2"]);
+  assert.deepEqual(ids(sorted(cars, "days", "desc")), ["b:2", "b:3", "a:1"]);
+});
+
+test("every field can be turned round", () => {
+  assert.deepEqual(ids(sorted(cars, "price", "desc")), ["b:2", "a:1", "b:3"]);
+  assert.deepEqual(ids(sorted(cars, "drop", "asc")), ["a:1", "b:3", "b:2"]);
+  assert.deepEqual(ids(sorted(cars, "year", "asc")), ["a:1", "b:3", "b:2"]);
+});
+
+test("a car that lacks the figure goes last whichever way the order runs", () => {
+  assert.deepEqual(ids(sorted(cars, "miles", "asc")), ["b:2", "a:1", "b:3"]);
+  assert.deepEqual(ids(sorted(cars, "miles", "desc")), ["a:1", "b:2", "b:3"]);
+  assert.deepEqual(ids(sorted(cars, "value", "asc")), ["b:2", "a:1", "b:3"]);
+});
+
+test("cars that tie keep the order they came in, whichever way the order runs", () => {
+  const twin = { ...camry, id: "z:9" };
+  assert.deepEqual(ids(sorted([camry, twin, f150], "price", "asc")), ["a:1", "z:9", "b:2"]);
+  assert.deepEqual(ids(sorted([camry, twin, f150], "price", "desc")), ["b:2", "a:1", "z:9"]);
+});
+
+test("each field starts in the direction a buyer usually wants", () => {
+  assert.deepEqual(DIRECTIONS, { value: "desc", price: "asc", total: "asc", drop: "desc", share: "desc",
+    year: "desc", miles: "asc", peryear: "asc", days: "asc" });
 });
 
 test("lowest price first", () => {

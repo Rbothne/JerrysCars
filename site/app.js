@@ -1,6 +1,6 @@
 // The page: load the cars build.py wrote, and show the ones the filters allow. The choosing is in logic.js.
 
-import { NOTABLE, amount, sorted, under, visible } from "./logic.js";
+import { DIRECTIONS, NOTABLE, amount, sorted, under, visible } from "./logic.js";
 
 const STEP = 120;                                  // cars drawn at a time
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -112,15 +112,19 @@ function filters() {
 }
 
 function draw() {
-  const matching = sorted(visible(cars, filters()), new FormData(form).get("order"));
+  const matching = sorted(visible(cars, filters()), form.elements.order.value, form.elements.direction.value);
   list.replaceChildren(...matching.slice(0, shown).map(card));
   document.getElementById("count").textContent = `${whole.format(matching.length)} of ${whole.format(cars.length)} cars`;
   document.getElementById("empty").hidden = matching.length > 0;
   more.hidden = matching.length <= shown;
 }
 
-form.elements.make.addEventListener("change", models);        // before the redraw below: the old model no longer applies
-form.addEventListener("input", () => { shown = STEP; draw(); });
+form.addEventListener("input", (event) => {
+  if (event.target === form.elements.make) models();                 // the old model no longer applies
+  if (event.target === form.elements.order) form.elements.direction.value = DIRECTIONS[form.elements.order.value];
+  shown = STEP;
+  draw();
+});
 document.getElementById("clear").addEventListener("click", () => { form.reset(); models(); shown = STEP; draw(); });
 more.addEventListener("click", () => { shown += STEP; draw(); });
 
