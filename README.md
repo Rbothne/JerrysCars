@@ -1,0 +1,86 @@
+# CraigsCars
+
+A catalogue of used cars for sale around Memphis, Tennessee, with their price history, and a page that shows them.
+
+Python standard library only. Tested with Python 3.14 and Node 26.
+
+## What is here
+
+| Piece | File | What it does |
+|---|---|---|
+| Dealer discovery | `discover.py`, `cartrack/dealers.py` | Dealers within the radius of the home point, and the website platform each runs on. Writes `dealers.json`. |
+| Readers | `cartrack/readers/` | One per dealer platform: DealerOn, AutoRevo, Dealer Car Search, Team Velocity, DealerFire, Dealer Alchemist, DealerCenter, Carsforsale.com, Carvana. Each gives back listings and whether it saw the whole inventory. |
+| Listing record | `cartrack/listings.py` | `make_listing()`: the one record every reader hands back. `None` means the source does not say. |
+| Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
+| VINs | `cartrack/vin.py` | Check digit, and identity from NHTSA's free vPIC service, 50 VINs a request. A decoded VIN's identity wins over the dealer's wording. |
+| Build | `build.py` | Reads every dealer that has a reader, updates the catalogue, decodes new VINs, writes `site/data/cars.json`. |
+| Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the filtering and ordering. |
+| Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
+| Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. |
+
+## Run
+
+    py discover.py                              # rewrites dealers.json and the catalogue's dealer table
+    py build.py                                 # reads the dealers, updates data/catalogue.db and site/data/cars.json
+    py -m http.server 8000 --directory site     # then open http://localhost:8000
+    py -m unittest discover -s tests -t .       # 213 Python tests
+    node --test tests/js/logic.test.mjs         # 13 page-logic tests
+
+## Publishing the page
+
+Not done yet: this folder is not a git repository. To publish:
+
+1. Create a GitHub repository and push this folder to its `main` branch. GitHub Pages on a free account needs the repository to be public.
+2. In the repository's Settings, under Pages, set the source to "GitHub Actions".
+3. Run the "Track cars" workflow once by hand. After that it runs twice a day.
+
+The workflow has not run on GitHub yet. Whether every dealer site answers GitHub's servers is unknown until it does; a dealer that refuses is reported in the run log and keeps its last known cars.
+
+## Configuration
+
+- `area.json`: home point and radius. Memphis, 60 miles.
+- `dealers-seed.json`: hand-kept dealers that OpenStreetMap lacks. Add a line to add a dealer, then run `py discover.py`.
+- `dealers.json`: written by discovery and read by the build. Committed, so the scheduled build does not rediscover.
+
+## How discovery places a dealer
+
+1. OpenStreetMap (`shop=car`) gives the dealers in the box around the home point. Seeds are merged in by website host.
+2. DNS for the dealer's host names the platform for the big ones, with no request to the dealer's site.
+3. Only when DNS says nothing, the dealer's front page is fetched once and matched against `PAGE_MARKS`.
+4. `READS` says whether that platform's inventory answers a plain request (`plain`), needs a real browser (`browser`), or has not been classified (absent).
+
+## What the readers were seen to do (2026-11-21, from a home connection)
+
+A live build read 19 of 19 dealers and put 3,605 cars on the page, 1,706 of them from dealers other than Carvana.
+
+| Platform | Dealers read | Requests per dealer | Whole inventory? |
+|---|---|---|---|
+| DealerOn | Jim Keras Nissan, Subaru and Buick GMC, Jimmy Gray Chevrolet | 1 page, then 1 per 96 cars | Yes |
+| AutoRevo | Peck Daniel, Memphis Car Smart, Stanley's, Tim Pomp | 2 | Yes when the sitemap lists no more cars than the page; robots.txt forbids its further pages |
+| Dealer Car Search | Street Cars of Memphis, Victory Auto, Imports of Memphis | 1 | Yes under 100 cars; a second page has not been tried |
+| Team Velocity | Gossett Motor Cars (two sites), INFINITI of Memphis | 1 per 50 cars, then 1 for photos | Yes. The three sites share one pool of 370 cars |
+| DealerFire | JR's Auto Sales | 1 per 100 cars | Yes |
+| Dealer Alchemist | City Auto | 1 page, then 1 per 250 cars | Yes. Only the lots in the dealer's own city are kept (451 of the group's 844) |
+| DealerCenter | Collierville Auto Center | 1, then 1 per 30 cars | Yes. Its pages sit behind a Cloudflare challenge; the reader asks the site's own admin-ajax service, which does not |
+| Carsforsale.com | E Z Auto | 1 per 24 cars | Yes |
+| Carvana | Carvana | 1, then 1 per 100 cars | Yes: the 1,899 cars with free delivery to ZIP 38103. 1,392 are kept within 60 miles, `extra.location_miles` says how far each is |
+
+Each platform's route, and what was tried and failed, is in `research/08-routing-*.md`.
+
+Known limits:
+
+- Imports of Memphis shows one unlabelled figure per car that is a down payment, so its cars have no asking price and stay off the page. The figure is kept in `extra.unlabelled_price`.
+- The asking price is the figure before the dealer's fees on every platform. Fees and the fee-inclusive figure are kept in `extra`.
+- Dealer.com (six sites) and Dealer Inspire (two) refuse plain requests and have no reader.
+- Landers Used (Dealer eProcess) and Supercars Autosales (Dealer Car Search) are behind a Cloudflare challenge on every page. A route through a visible browser was found for both and is not part of the build: `research/08-routing-dealereprocess.md`, `research/08-routing-unknowns.md`. `cartrack/readers/dealereprocess.py` is written and tested but not registered.
+- The Jim Keras sites, and the Gossett sites, list many of the same cars. The page shows each car once, by VIN, at its lowest price.
+- Some sites turn away particular user agents: Carsforsale.com answers "python-urllib" with a false 500, and the Team Velocity sites answer 406 without "Mozilla/5.0". The readers say which name they send.
+- Car Choice's website is gone, and King Cotton Ford is now Landers Ford North, on Dealer.com.
+
+## Not built yet
+
+- Readers for Craigslist and the city impound auction, and the Facebook extension.
+- Identity from a listing's title, and linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
+- Comparable segments and discount scoring. The page orders by price cut, which needs a few days of history to mean anything.
+
+Research behind these choices is in `research/`, numbered 01 to 07.

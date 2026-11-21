@@ -1,0 +1,56 @@
+name: Track cars
+
+on:
+  schedule:
+    - cron: "20 11 * * *"       # about 5:20 am Central
+    - cron: "20 23 * * *"       # about 5:20 pm Central: catch same-day price changes
+  workflow_dispatch:
+  push:                         # a change to the page republishes it; a change to the code or the dealers rebuilds
+    branches: [main]
+    paths: ["site/**", "cartrack/**", "build.py", "dealers.json", ".github/workflows/update.yml", ".github/scripts/**"]
+
+permissions:
+  contents: write               # to replace the data branch
+  pages: write                  # to publish the site
+  id-token: write               # required by the Pages deploy action
+
+concurrency:                    # one run at a time, so two never race on the data branch
+  group: tracking
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run the tests
+        run: |
+          python -m unittest discover -s tests -t .
+          node --test tests/js/*.test.mjs
+
+      - name: Get the latest data
+        run: bash .github/scripts/data-branch.sh load || echo "starting a new catalogue"
+
+      # A dealer whose read fails keeps what the catalogue knew; build.py fails this step only when every
+      # dealer failed, and then the data branch and the page are left as they were.
+      - name: Read the dealers and update the catalogue
+        run: python build.py
+
+      - name: Save the data
+        run: bash .github/scripts/data-branch.sh save
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,4 @@
+# Shell scripts must stay LF so they run on the Ubuntu Actions runner.
+*.sh text eol=lf
+# Normalize text; leave the HTML/JSON fixtures and data as-is.
+* text=auto

@@ -1,0 +1,398 @@
+{
+ "Paging": {
+  "PaginationDataModel": {
+   "PageEnd": 12,
+   "PageNumber": 1,
+   "PageSize": 12,
+   "PageStart": 0,
+   "TotalPages": 1,
+   "TotalCount": 2
+  },
+  "NumberOfVehiclesToShowModel": {
+   "12": "/searchused.aspx?host=www.jimkerasnissan.com&pn=12",
+   "24": "/searchused.aspx?host=www.jimkerasnissan.com&pn=24",
+   "48": "/searchused.aspx?host=www.jimkerasnissan.com&pn=48",
+   "96": "/searchused.aspx?host=www.jimkerasnissan.com&pn=96"
+  }
+ },
+ "DisplayCards": [
+  {
+   "VehicleCard": {
+    "VehicleVin": "1G1PA5SHXD7214401",
+    "VehicleYear": 2013,
+    "VehicleMake": "Chevrolet",
+    "VehicleModel": "Cruze",
+    "VehicleTrim": "LS",
+    "VehicleMileage": 153496,
+    "VehicleStockNumber": "S2669301A",
+    "VehicleBodyType": "Sedan",
+    "VehicleEngine": "Gas I4 1.8L/110",
+    "VehicleDriveTrain": null,
+    "ExteriorColorLabel": "Atlantis Blue Metallic",
+    "VehicleTaggingInventoryDate": "2026/10/24",
+    "TaggingPrice": "6999",
+    "VehicleInternetPrice": 0.0,
+    "VehicleMsrp": 6999.0,
+    "DealerName": "Jim Keras Nissan",
+    "DealerLocatedAtCity": "Memphis",
+    "DealerLocatedAtState": "TN",
+    "VehicleDetailUrl": "https://www.jimkerasnissan.com/used-Memphis-2013-Chevrolet-Cruze-LS-1G1PA5SHXD7214401",
+    "VehicleCondition": "Used",
+    "IsAdCard": null,
+    "VehicleTransmission": "Automatic",
+    "VehicleFuelType": "Gasoline Fuel",
+    "VehiclePriceLibrary": "TVNSUDo2OTk5LjA7SW50ZXJuZXQgUHJpY2U6Mzc0MC4wO3JlZmZfRmxhdCBIaWdoIFByaWNlOjY5OTkuMDtyZWZmX0ZsYXQgTG93IFByaWNlOjM3NDAuMDtjYWxjX1NhdmluZ3M6MzI1OS4wO2NhbGNfRGVhbGVyIERvYyBGZWU6ODk5LjA7Y2FsY19JTlRFUk5FVCBQUklDRTozNzQwLjA7Y2FsY190b3RhbCBwcmljZTo0NjM5LjA=",
+    "VehiclePhotoCount": 90,
+    "VehicleImageModel": {
+     "HasInventoryOrStockPhotos": true,
+     "VehicleDetailUrl": "https://www.jimkerasnissan.com/used-Memphis-2013-Chevrolet-Cruze-LS-1G1PA5SHXD7214401",
+     "VehiclePhotoSrc": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/thumbs/1.jpg",
+     "DealerName": "Jim Keras Nissan",
+     "CornerType": "",
+     "SrpImageBreakpointWidthPairs": [
+      {
+       "Breakpoint": 539,
+       "Width": 540
+      },
+      {
+       "Breakpoint": 639,
+       "Width": 595
+      },
+      {
+       "Breakpoint": 991,
+       "Width": 467
+      },
+      {
+       "Breakpoint": 1299,
+       "Width": 864
+      },
+      {
+       "Breakpoint": 1532,
+       "Width": 1099
+      },
+      {
+       "Breakpoint": 1919,
+       "Width": 806
+      },
+      {
+       "Breakpoint": 1920,
+       "Width": 1031
+      }
+     ],
+     "VehicleNameHtmlEncoded": "2013 Chevrolet Cruze LS",
+     "ImageAltText": "2013 Chevrolet Cruze LS",
+     "Vin": null,
+     "VehicleImageCarouselModel": {
+      "Vin": "1G1PA5SHXD7214401",
+      "VehicleNameHtmlEncoded": "2013 Chevrolet Cruze LS",
+      "DetailedImageCount": 5,
+      "ImageCount": 5,
+      "TotalImageCount": 90,
+      "RedirectLocation": "https://www.jimkerasnissan.com/used-Memphis-2013-Chevrolet-Cruze-LS-1G1PA5SHXD7214401",
+      "VehicleUxPostion": 0,
+      "PhotoList": [
+       "/inventoryphotos/13757/1g1pa5shxd7214401/ip/1.jpg",
+       "/inventoryphotos/13757/1g1pa5shxd7214401/ip/2.jpg",
+       "/inventoryphotos/13757/1g1pa5shxd7214401/ip/3.jpg",
+       "/inventoryphotos/13757/1g1pa5shxd7214401/ip/4.jpg",
+       "/inventoryphotos/13757/1g1pa5shxd7214401/ip/5.jpg",
+       "/inventoryphotos/13757/1g1pa5shxd7214401/ip/5.jpg"
+      ],
+      "PhotoListDetailed": [
+       {
+        "TargetUrl": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/1.jpg",
+        "Width": 1500,
+        "Height": 1076,
+        "AspectRatio": 1.394052,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T21:21:40Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/2.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T21:21:40Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/3.jpg",
+        "Width": 1500,
+        "Height": 1032,
+        "AspectRatio": 1.4534883,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T21:21:40Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/4.jpg",
+        "Width": 1500,
+        "Height": 1055,
+        "AspectRatio": 1.421801,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T21:21:40Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/5.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T21:21:40Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/1g1pa5shxd7214401/ip/5.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T21:21:40Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       }
+      ],
+      "CornerType": "",
+      "IsSignalsForYou": false,
+      "BackgroundColorQueryParam": "bg-color=FFFFFF",
+      "SrpImageBreakpointWidthPairs": [
+       {
+        "Breakpoint": 539,
+        "Width": 540
+       },
+       {
+        "Breakpoint": 639,
+        "Width": 595
+       },
+       {
+        "Breakpoint": 991,
+        "Width": 467
+       },
+       {
+        "Breakpoint": 1299,
+        "Width": 864
+       },
+       {
+        "Breakpoint": 1532,
+        "Width": 1099
+       },
+       {
+        "Breakpoint": 1919,
+        "Width": 806
+       },
+       {
+        "Breakpoint": 1920,
+        "Width": 1031
+       }
+      ],
+      "PhotosUnavailable": false,
+      "PhotosUnavailableLabel": "Vehicle Photos Unavailable Please Check Back Soon",
+      "PhotoLabel": "2013 Chevrolet Cruze LS",
+      "BlurCtaBackground": false
+     },
+     "ImageProvider": "Homenet Batch Feed"
+    }
+   }
+  },
+  {
+   "VehicleCard": {
+    "VehicleVin": "JTNJJXB0XEJ027730",
+    "VehicleYear": 2014,
+    "VehicleMake": "Scion",
+    "VehicleModel": "iQ",
+    "VehicleTrim": "Base",
+    "VehicleMileage": 100795,
+    "VehicleStockNumber": "S2620004A",
+    "VehicleBodyType": "Hatchback",
+    "VehicleEngine": "Regular Gasoline I-4 1.3 L/81",
+    "VehicleDriveTrain": null,
+    "ExteriorColorLabel": "Black Currant",
+    "VehicleTaggingInventoryDate": "2026/09/29",
+    "TaggingPrice": "8500",
+    "VehicleInternetPrice": 0.0,
+    "VehicleMsrp": 8500.0,
+    "DealerName": "Jim Keras Nissan",
+    "DealerLocatedAtCity": "Memphis",
+    "DealerLocatedAtState": "TN",
+    "VehicleDetailUrl": "https://www.jimkerasnissan.com/used-Memphis-2014-Scion-iQ-+-JTNJJXB0XEJ027730",
+    "VehicleCondition": "Used",
+    "IsAdCard": null,
+    "VehicleTransmission": "Variable",
+    "VehicleFuelType": "Gasoline Fuel",
+    "VehiclePriceLibrary": "TVNSUDo4NTAwLjA7SW50ZXJuZXQgUHJpY2U6NTA5MC4wO3JlZmZfRmxhdCBIaWdoIFByaWNlOjg1MDAuMDtyZWZmX0ZsYXQgTG93IFByaWNlOjUwOTAuMDtjYWxjX1NhdmluZ3M6MzQxMC4wO2NhbGNfRGVhbGVyIERvYyBGZWU6ODk5LjA7Y2FsY19JTlRFUk5FVCBQUklDRTo1MDkwLjA7Y2FsY190b3RhbCBwcmljZTo1OTg5LjA=",
+    "VehiclePhotoCount": 96,
+    "VehicleImageModel": {
+     "HasInventoryOrStockPhotos": true,
+     "VehicleDetailUrl": "https://www.jimkerasnissan.com/used-Memphis-2014-Scion-iQ-+-JTNJJXB0XEJ027730",
+     "VehiclePhotoSrc": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/thumbs/1.jpg",
+     "DealerName": "Jim Keras Nissan",
+     "CornerType": "",
+     "SrpImageBreakpointWidthPairs": [
+      {
+       "Breakpoint": 539,
+       "Width": 540
+      },
+      {
+       "Breakpoint": 639,
+       "Width": 595
+      },
+      {
+       "Breakpoint": 991,
+       "Width": 467
+      },
+      {
+       "Breakpoint": 1299,
+       "Width": 864
+      },
+      {
+       "Breakpoint": 1532,
+       "Width": 1099
+      },
+      {
+       "Breakpoint": 1919,
+       "Width": 806
+      },
+      {
+       "Breakpoint": 1920,
+       "Width": 1031
+      }
+     ],
+     "VehicleNameHtmlEncoded": "2014 Scion iQ Base",
+     "ImageAltText": "2014 Scion iQ Base",
+     "Vin": null,
+     "VehicleImageCarouselModel": {
+      "Vin": "JTNJJXB0XEJ027730",
+      "VehicleNameHtmlEncoded": "2014 Scion iQ Base",
+      "DetailedImageCount": 5,
+      "ImageCount": 5,
+      "TotalImageCount": 96,
+      "RedirectLocation": "https://www.jimkerasnissan.com/used-Memphis-2014-Scion-iQ-+-JTNJJXB0XEJ027730",
+      "VehicleUxPostion": 1,
+      "PhotoList": [
+       "/inventoryphotos/13757/jtnjjxb0xej027730/ip/1.jpg",
+       "/inventoryphotos/13757/jtnjjxb0xej027730/ip/2.jpg",
+       "/inventoryphotos/13757/jtnjjxb0xej027730/ip/3.jpg",
+       "/inventoryphotos/13757/jtnjjxb0xej027730/ip/4.jpg",
+       "/inventoryphotos/13757/jtnjjxb0xej027730/ip/5.jpg",
+       "/inventoryphotos/13757/jtnjjxb0xej027730/ip/5.jpg"
+      ],
+      "PhotoListDetailed": [
+       {
+        "TargetUrl": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/1.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T03:56:17Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/2.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T03:56:17Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/3.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T03:56:17Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/4.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T03:56:17Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/5.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T03:56:17Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       },
+       {
+        "TargetUrl": "/inventoryphotos/13757/jtnjjxb0xej027730/ip/5.jpg",
+        "Width": 1500,
+        "Height": 1125,
+        "AspectRatio": 1.3333334,
+        "Is360": false,
+        "DownloadDate": "2026-11-03T03:56:17Z",
+        "Provider": "Homenet Batch Feed",
+        "IsSuccessful": true
+       }
+      ],
+      "CornerType": "",
+      "IsSignalsForYou": false,
+      "BackgroundColorQueryParam": "bg-color=FFFFFF",
+      "SrpImageBreakpointWidthPairs": [
+       {
+        "Breakpoint": 539,
+        "Width": 540
+       },
+       {
+        "Breakpoint": 639,
+        "Width": 595
+       },
+       {
+        "Breakpoint": 991,
+        "Width": 467
+       },
+       {
+        "Breakpoint": 1299,
+        "Width": 864
+       },
+       {
+        "Breakpoint": 1532,
+        "Width": 1099
+       },
+       {
+        "Breakpoint": 1919,
+        "Width": 806
+       },
+       {
+        "Breakpoint": 1920,
+        "Width": 1031
+       }
+      ],
+      "PhotosUnavailable": false,
+      "PhotosUnavailableLabel": "Vehicle Photos Unavailable Please Check Back Soon",
+      "PhotoLabel": "2014 Scion iQ Base",
+      "BlurCtaBackground": false
+     },
+     "ImageProvider": "Homenet Batch Feed"
+    }
+   }
+  },
+  {
+   "VehicleCard": null,
+   "AdCard": {
+    "x": 1
+   }
+  }
+ ]
+}
