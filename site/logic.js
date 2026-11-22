@@ -209,6 +209,7 @@ export function lotsSorted(lots, how) {
     });
   }
   const turn = how === "newest" ? -1 : 1;
-  return [...lots].sort((a, b) => turn * (a.ends || "").localeCompare(b.ends || "")
+  return [...lots].sort((a, b) => !a.ends - !b.ends             // a sale with no day read goes last either way
+    || turn * (a.ends || "").localeCompare(b.ends || "")
     || (how === "newest" ? 0 : (Number(a.lot) || 0) - (Number(b.lot) || 0)));
 }

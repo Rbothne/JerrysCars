@@ -293,6 +293,59 @@ class Auctions(unittest.TestCase):
                          [{"source": "venture-auctions.com", "live": 1, "priced": 1, "shown": 1}])
 
 
+NOTICES = {"key": "memphisdailynews.com", "kind": "liennotices", "site": "https://www.memphisdailynews.com",
+           "name": "Lien sales (Daily News notices)", "floor": 0}
+
+
+def announced(source_id, ends, seen=NOW, **fields):
+    return make_listing("memphisdailynews.com", source_id, **{
+        "url": "https://www.memphisdailynews.com/notices/2026/Nov/20/", "title": "2012 Toyota Camry", "seen": seen,
+        "channel": "auction", "price_kind": "starting", "posted": "2026-11-20T00:00", "ends": ends, "year": 2012,
+        "make": "toyota", "model": "Camry", "seller_name": "A Towing LLC",
+        "extra": {"ad": "MD1", "hour": "10:00", "address": "1 Main St, Memphis, TN 38103"}, **fields})
+
+
+class LienSales(unittest.TestCase):
+    def setUp(self):
+        self.db = catalogue.open_catalogue(":memory:")
+        self.addCleanup(self.db.close)
+
+    def run_build(self, *cars, now=NOW):
+        def read(place, get, seen, known=()):
+            return [dict(one, seen=seen) for one in cars], False
+        return build.read_sources(self.db, [NOTICES], {"liennotices": read}, None, now, say=lambda line: None)
+
+    def live(self):
+        return [row[0] for row in self.db.execute("SELECT source_id FROM listing WHERE gone IS NULL ORDER BY source_id")]
+
+    def test_a_car_announced_once_stays_until_the_day_after_its_sale_though_no_later_read_finds_it(self):
+        self.run_build(announced("MD1-A", "2026-11-28T00:00"), announced("MD1-B", "2026-12-05T00:00"))
+        for day in ("24", "27", "28"):                # a week of reads that find neither: the paper printed them once
+            self.run_build(now=f"2026-11-{day}T05:00")
+            self.assertEqual(self.live(), ["MD1-A", "MD1-B"])
+        report = self.run_build(now="2026-11-29T05:00")
+        self.assertEqual((self.live(), report[0]["gone"], report[0]["ok"]), (["MD1-B"], 1, True))
+        self.assertEqual(self.db.execute("SELECT gone_how FROM listing WHERE source_id = 'MD1-A'").fetchone()[0], "expired")
+
+    def test_the_auction_page_gets_the_cars_still_to_be_sold_soonest_first_and_they_are_not_auction_lots(self):
+        self.run_build(announced("MD1-B", "2026-12-05T00:00"), announced("MD1-A", "2026-11-28T00:00"),
+                       announced("MD1-C", "2026-11-19T00:00"))
+        catalogue.record(self.db, lot("5360-1", price=600))
+        catalogue.end(self.db, "venture-auctions.com:5360-1", "2026-11-11T15:40", "sold")
+        for number, asking in enumerate((6500, 7500, 8000)):
+            catalogue.record(self.db, car("peckdaniel.com", str(number), price=asking))
+        data = build.auction_data(self.db, [IMPOUND, NOTICES], NOW)
+        self.assertEqual(data["lots"], [])
+        first = data["notices"][0]
+        self.assertEqual([one["id"].split(":")[1] for one in data["notices"]], ["MD1-A", "MD1-B"])     # C's day has passed
+        self.assertEqual({name: first[name] for name in ("title", "ends", "hour", "address", "seller", "from", "place")},
+                         {"title": "2012 Toyota Camry", "ends": "2026-11-28T00:00", "hour": "10:00",
+                          "address": "1 Main St, Memphis, TN 38103", "seller": "A Towing LLC",
+                          "from": "Lien sales (Daily News notices)", "place": "memphisdailynews.com"})
+        self.assertEqual((first["before"], first["asks"]["median"]), ({"count": 1, "median": 600, "low": 600, "high": 600}, 7500))
+        self.assertEqual(build.page_data(self.db, [PECK], NOW, places=[NOTICES], area=AREA)["cars"][0]["id"], "peckdaniel.com:0")
+
+
 class SideBySide(unittest.TestCase):
     """Every source is asked at once, each at its own site's pace, so a run takes as long as its slowest site
     and not as long as all of them added up."""

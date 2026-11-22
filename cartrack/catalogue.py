@@ -229,6 +229,16 @@ def end(db, listing_id, when, how):
         db.execute("UPDATE listing SET gone = ?, gone_how = ? WHERE id = ?", (when, how, listing_id))
 
 
+def expire(db, source, when):
+    """Mark `source`'s live listings gone as "expired" once the day they said they would end has passed.
+    Returns how many. For a sale announced once and held later: a lien sale's notice, which no later read
+    repeats and no result follows."""
+    with db:
+        return db.execute(
+            "UPDATE listing SET gone = ?, gone_how = 'expired' WHERE source = ? AND gone IS NULL AND ends IS NOT NULL "
+            "AND substr(ends, 1, 10) < substr(?, 1, 10)", (when, source, when)).rowcount
+
+
 def age_out(db, source, when, days=UNSEEN_DAYS):
     """Mark `source`'s live listings gone when no read has found them for `days`, though reads since have found
     others. Returns how many. close_out decides "gone" only from a whole read that did not shrink, and some

@@ -1,7 +1,7 @@
 # CraigsCars
 
 A catalogue of used cars for sale around Memphis, Tennessee, with their price history, and a page that shows them.
-It reads dealers' own websites, Craigslist's for-sale-by-owner listings in seven cities, and the City of Memphis impound auction. The dealers are the yardstick; the
+It reads dealers' own websites, Craigslist's for-sale-by-owner listings in seven cities, the City of Memphis impound auction, and the tow-lot and garage lien sales announced in The Daily News. The dealers are the yardstick; the
 cars worth finding are the ones priced well under them.
 
 Python standard library only. Tested with Python 3.14 and Node 26.
@@ -21,7 +21,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). And what to pay for a car so that $1,000 is left after selling it on privately: what private sellers ask for one like it, less 8% talked down, tax on the purchase, title, $500 to get it ready, an advert and a month's insurance. The assumptions are in `ASSUME`, with their sources in `research/11-profit-estimate.md`. |
 | Build | `build.py` | Reads every source and every dealer that has a reader, updates the catalogue, decodes new VINs, names the listings that have only a seller's words, judges value, writes `site/data/cars.json`. |
 | Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: within so many miles, sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed, distance), ascending or descending, and opens with the cars furthest under similar ones first. |
-| Auction page | `site/auctions.html`, `site/auctions.js` | The impound auction's coming lots and every past result, from `site/data/auctions.json`. Beside a coming lot: what such cars sold for there before, what they ask around Memphis, and whether this car has been through a sale already. Styles are shared with the cars page in `site/style.css`. |
+| Auction page | `site/auctions.html`, `site/auctions.js` | The impound auction's coming lots and every past result, and the cars in lien-sale notices still to be sold (`auctions.html#notices`), from `site/data/auctions.json`. Beside a coming lot: what such cars sold for there before, what they ask around Memphis, and whether this car has been through a sale already. Styles are shared with the cars page in `site/style.css`. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
 | Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. Every source is read at the same time, each site at its own pace (below). |
 
@@ -30,8 +30,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 386 Python tests
-    node --test tests/js/logic.test.mjs         # 63 page-logic tests
+    py -m unittest discover -s tests -t .       # 402 Python tests
+    node --test tests/js/logic.test.mjs         # 64 page-logic tests
 
 ## Publishing the page
 
@@ -60,6 +60,14 @@ run log and keeps its last known cars.
 - A lot states no mileage, keys, running condition or title, so it has no asking price and is never ranked with the cars for sale. It lives on its own page. A lot with a result is closed the moment it is recorded: "sold", or "ended_unsold" for one the auctioneer marked no-sale.
 - `sources.json` carries the auction's own charges (`premium` 0.1, `fee` 10, `card` 0.04), which the page uses to say what a bid costs before tax.
 - Not seen yet: what an open lot shows once prebidding starts (read as the bid so far, as the auctioneer's sister site showed it), and whether the site answers GitHub's servers.
+
+## Lien sales (seen 2026-11-22, from a home connection)
+
+- A tow lot or garage owed money on a car advertises before selling it, and in Memphis those notices run in The Daily News: `https://www.memphisdailynews.com/notices/{YYYY}/{Mon}/{D}/`, one request a day, which its robots.txt allows. The first read asked for fourteen days and found 268 cars in the notices, 214 of them with their sale still to come; every VIN decoded. Later reads ask for three days.
+- **The notices print each car's owner beside it.** The reader keeps only what a pattern matches: the VIN (never the text after it), a "year and words" line whose year agrees with the VIN's own, and the sale's day, hour and address. A name matches none of those, so it is never kept; the test fixture was scrubbed the same way before it was saved. The seller is kept only where the notice names one with a business word in the name.
+- These are in-person sales at the lot, a week or two after the notice, with no price given. A listing is not let go when the paper stops printing it; it expires the day after its sale.
+- On the six days first studied: 47 notices, words found beside 97% of the VINs, a sale day for 262 of 266 cars, an hour for 195, a full address for 189 (`research/11-routing-more-marketplaces.md`). Four in ten addresses are a street alone or a layout the pattern does not read.
+- Not read: the Commercial Appeal's "Auto Auction" legal notices, a second and smaller source the same splitter would fit.
 
 ## Craigslist (seen 2026-11-21, from a home connection)
 
@@ -180,7 +188,8 @@ Seen on the build of 2026-11-21 (3,602 cars):
 
 ## Not built yet
 
-- Readers for government surplus, tow-lot lien sales and lenders' repossessions, and the Facebook extension.
+- Readers for government surplus and lenders' repossessions, the Commercial Appeal's sale notices, eBay Motors (needs a developer key), and the Facebook extension.
+- A watcher that checks Craigslist every quarter of an hour and sends an alert (`research/11-alerts-and-cadence.md`).
 - Craigslist's by-dealer listings, and reposts of one car under a new listing.
 - Linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
 - A net figure after tax, title and repairs, and how fast each model sells. Price-cut ordering needs a few days of history to mean anything.

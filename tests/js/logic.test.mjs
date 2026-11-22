@@ -375,3 +375,9 @@ test("asking price against what to pay: the car with most room first, cars with 
   const none = { id: "x", price: 3000, pay: null };
   assert.deepEqual(ids(sorted([far, none, near, room], "room")), ["r", "n", "f", "x"]);
 });
+
+test("a sale whose day could not be read goes last, in sale order and newest first alike", () => {
+  const undated = { id: "u", title: "a car", ends: null };
+  assert.deepEqual(ids(lotsSorted([undated, lotC, lotA], "sale")), ["v:0-9", "v:1-1", "u"]);
+  assert.deepEqual(ids(lotsSorted([undated, lotC, lotA], "newest")), ["v:1-1", "v:0-9", "u"]);
+});

@@ -1,5 +1,6 @@
 [
  {"key": "venture-auctions.com", "kind": "auctioneersoftware", "site": "https://www.venture-auctions.com", "name": "City of Memphis impound auction", "city": "Memphis", "state": "TN", "zip": "38127", "lat": 35.20956, "lon": -90.04762, "floor": 0, "premium": 0.1, "fee": 10, "card": 0.04, "ready": 1500},
+ {"key": "memphisdailynews.com", "kind": "liennotices", "site": "https://www.memphisdailynews.com", "name": "Lien sales (Daily News notices)", "floor": 0},
  {"key": "memphis.craigslist.org", "kind": "craigslist", "site": "memphis", "name": "Craigslist: Memphis", "floor": 0.5},
  {"key": "jonesboro.craigslist.org", "kind": "craigslist", "site": "jonesboro", "name": "Craigslist: Jonesboro", "floor": 0.5},
  {"key": "northmiss.craigslist.org", "kind": "craigslist", "site": "northmiss", "name": "Craigslist: North Mississippi", "floor": 0.5},

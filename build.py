@@ -26,18 +26,22 @@ ONLINE = {"carvana"}                              # platforms that deliver a car
 OWN_IDS = 0.8          # a read where fewer than this share of the listings have an id of their own was read wrongly
 WORKERS = 32           # sources read at the same time; each site still gets one request at a time (fetch.paced)
 ONE_COMPANY = ("craigslist.org",)                 # every host under these is paced as a single site
+ANNOUNCED = ("liennotices",)                      # kinds of source that announce a sale once, for a later day
 BRANDED = ("rebuilt", "salvage", "lien")          # titles that are priced against clean cars and never the other way
 OVER = {"sold": "sold", "reserve_not_met": "ended_unsold"}     # a price that is a sale's result -> how the listing ended
 NEAR_YEARS = 3         # model years either side that count as the same car when auction lots are set beside others
 
 
-def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
+def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR, announced=False):
     """Run one read and record what it found under `source`. Returns the report line for it.
 
     Two things a read can get wrong without failing are caught here. A reader that takes the wrong thing for
     a listing's id gives many listings the same one, and they would overwrite each other down to a handful:
     such a read is refused. And a read that is never quite whole, or that shrank for good, marks nothing
-    gone: so a listing no read has found for three days is let go whatever the reads called themselves."""
+    gone: so a listing no read has found for three days is let go whatever the reads called themselves.
+
+    `announced` is for a source that says once that something will be sold on a later day (a lien sale's
+    notice): its listings are not let go for going unseen, and expire the day after the day they named."""
     line = {"dealer": key, "platform": platform, "ok": False, "read": 0, "new": 0, "gone": 0, "complete": None,
             "error": None}
     try:
@@ -50,7 +54,7 @@ def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
             if listing["price_kind"] in OVER:
                 catalogue.end(db, listing["id"], listing["ends"] or now, OVER[listing["price_kind"]])
         line.update(read=len(listed), new=outcomes.count("new"), complete=complete)
-        line["gone"] = catalogue.age_out(db, source, now)
+        line["gone"] = catalogue.expire(db, source, now) if announced else catalogue.age_out(db, source, now)
         if complete:
             line["gone"] += catalogue.close_out(db, source, list(listed), now, floor)
         line["ok"] = True
@@ -85,7 +89,7 @@ def source_jobs(db, places, readers, get, now):
             "AND (channel != 'classified' OR extra LIKE '%\"flags\"%')",     # a classified read before its words were: once more
             (place["key"],))}
         jobs.append({"key": place["key"], "platform": place["kind"], "source": place["key"],
-                     "floor": place.get("floor", catalogue.FLOOR),
+                     "floor": place.get("floor", catalogue.FLOOR), "announced": place.get("kind") in ANNOUNCED,
                      "read": functools.partial(read, place, get, now, known=known)})
     return jobs
 
@@ -98,7 +102,7 @@ def run(db, jobs, now, say=print, workers=1):
     run takes as long as its slowest site, not as long as all of them added up, and no site is asked any
     faster for it: the `get` the readers share (fetch.paced) still gives each site one request at a time."""
     def keep(job, read):
-        return _keep(db, job["key"], job["platform"], job["source"], read, now, say, job["floor"])
+        return _keep(db, job["key"], job["platform"], job["source"], read, now, say, job["floor"], job.get("announced", False))
     if workers <= 1 or len(jobs) <= 1:
         return [keep(job, job["read"]) for job in jobs]
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as pool:
@@ -321,9 +325,12 @@ def auction_data(db, places, now):
     for sale is. Beside each coming lot go the facts that can be had: `before`, what the same make and model
     within three model years fetched at these sales; `asks`, what such cars are asking around here today;
     and `back`, when this very car (by VIN) was in an earlier sale and how that ended. `places` carries each
-    auction's own charges, so the page can say what a bid costs."""
+    auction's own charges, so the page can say what a bid costs. `notices` are the cars a tow lot or garage has
+    announced it will sell on a day still to come: no price, a day, an hour and an address."""
     rows = db.execute("SELECT * FROM listing WHERE channel = 'auction' AND price_kind != 'ask' ORDER BY id").fetchall()
-    coming = [row for row in rows if row["gone"] is None]
+    told = {place["key"] for place in places if place.get("kind") in ANNOUNCED}
+    coming = [row for row in rows if row["gone"] is None and row["source"] not in told]
+    notices = [row for row in rows if row["gone"] is None and row["source"] in told and (row["ends"] or now)[:10] >= now[:10]]
     over = [row for row in rows if row["gone_how"] in ("sold", "ended_unsold")]
     fetched, asked, earlier = {}, {}, {}
     for row in over:
@@ -356,7 +363,16 @@ def auction_data(db, places, now):
                              if last else None})
     results = sorted(({**lot(row), "sold": row["gone_how"] == "sold"} for row in over),
                      key=lambda one: (one["ends"] or "", one["id"]), reverse=True)
+    names = {place["key"]: place.get("name") for place in places}
+
+    def notice(row):
+        extra = json.loads(row["extra"] or "{}")
+        return {"id": row["id"], "title": row["title"], "url": row["url"], "year": row["year"], "make": row["make"],
+                "model": row["model"], "vin": row["vin"], "ends": row["ends"], "hour": extra.get("hour"),
+                "address": extra.get("address"), "seller": row["seller_name"], "place": row["source"],
+                "from": names.get(row["source"]), "before": _middle(near(fetched, row)), "asks": _middle(near(asked, row))}
     return {"built": now, "lots": lots, "results": results, "assume": cost.ASSUME,
+            "notices": sorted((notice(row) for row in notices), key=lambda one: (one["ends"] or "9", one["id"])),
             "places": [{"key": place["key"], "name": place.get("name"), "premium": place.get("premium"),
                         "fee": place.get("fee"), "card": place.get("card"), "ready": place.get("ready")}
                        for place in places if place.get("kind") in ("auctioneersoftware",)]}
@@ -371,7 +387,7 @@ def funnel(db, data, auctions=None):
     for car in data["cars"]:
         for seller in (car["dealer_key"], *car["also"]):
             shown[seller] = shown.get(seller, 0) + 1
-    for lot in (auctions or {}).get("lots", ()):
+    for lot in (*(auctions or {}).get("lots", ()), *(auctions or {}).get("notices", ())):
         shown[lot["place"]] = shown.get(lot["place"], 0) + 1
     return [{"source": source, "live": live, "priced": priced, "shown": shown.get(source, 0)}
             for source, live, priced in db.execute(
@@ -397,7 +413,8 @@ def main():
     data = page_data(db, found["dealers"], now, report, places=places, area=found["area"])
     data["area"] = found["area"]
     auctions = auction_data(db, places, now)
-    print(f"{len(auctions['lots'])} auction lots coming up, {len(auctions['results'])} results on record")
+    print(f"{len(auctions['lots'])} auction lots coming up, {len(auctions['results'])} results on record, "
+          f"{len(auctions['notices'])} cars in lien-sale notices")
     print(f"{'source':<34} {'live':>5} {'priced':>6} {'on page':>7}")
     for line in funnel(db, data, auctions):
         print(f"{line['source']:<34} {line['live']:5d} {line['priced']:6d} {line['shown']:7d}"
