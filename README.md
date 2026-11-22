@@ -1,7 +1,7 @@
 # CraigsCars
 
 A catalogue of used cars for sale around Memphis, Tennessee, with their price history, and a page that shows them.
-It reads dealers' own websites and Craigslist's for-sale-by-owner listings. The dealers are the yardstick; the
+It reads dealers' own websites, Craigslist's for-sale-by-owner listings in seven cities, and the City of Memphis impound auction. The dealers are the yardstick; the
 cars worth finding are the ones priced well under them.
 
 Python standard library only. Tested with Python 3.14 and Node 26.
@@ -12,7 +12,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 |---|---|---|
 | Dealer discovery | `discover.py`, `cartrack/dealers.py` | Dealers within the radius of the home point, and the website platform each runs on. Writes `dealers.json`. |
 | Readers | `cartrack/readers/` | One per dealer platform: DealerOn, AutoRevo, Dealer Car Search, Team Velocity, DealerFire, Dealer Alchemist, DealerCenter, Carsforsale.com, Carvana. Each gives back listings and whether it saw the whole inventory. |
-| Other sources | `cartrack/sources/` | Readers for places that are not one dealer's website, listed by hand in `sources.json`. Craigslist by owner is the first: one search page a run, and each listing's own page once. |
+| Other sources | `cartrack/sources/` | Readers for places that are not one dealer's website, listed by hand in `sources.json`. Craigslist by owner: one search page a city a run, and each listing's own page once. The City of Memphis impound auction: the coming sale's lots every run, and each finished sale once, for what its lots sold for. |
 | Naming | `cartrack/identify.py` | Make and model for a listing that gives them only in the seller's words ("chevy silverado lt"), matched against the models the catalogue knows from decoded VINs. |
 | Listing record | `cartrack/listings.py` | `make_listing()`: the one record every reader hands back. `None` means the source does not say. |
 | Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
@@ -21,6 +21,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). Title and registration are not in it. |
 | Build | `build.py` | Reads every source and every dealer that has a reader, updates the catalogue, decodes new VINs, names the listings that have only a seller's words, judges value, writes `site/data/cars.json`. |
 | Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: within so many miles, sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed, distance), ascending or descending, and opens with the cars furthest under similar ones first. |
+| Auction page | `site/auctions.html`, `site/auctions.js` | The impound auction's coming lots and every past result, from `site/data/auctions.json`. Beside a coming lot: what such cars sold for there before, what they ask around Memphis, and whether this car has been through a sale already. Styles are shared with the cars page in `site/style.css`. |
 | Schedule | `.github/workflows/update.yml` | Twice a day on GitHub Actions: build, keep the catalogue on the `data` branch, publish `site/` to GitHub Pages. |
 | Fetching | `cartrack/fetch.py` | Plain HTTP with retries and a per-site delay. Sends the tracker's own name. Every source is read at the same time, each site at its own pace (below). |
 
@@ -29,8 +30,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 323 Python tests
-    node --test tests/js/logic.test.mjs         # 51 page-logic tests
+    py -m unittest discover -s tests -t .       # 349 Python tests
+    node --test tests/js/logic.test.mjs         # 56 page-logic tests
 
 ## Publishing the page
 
@@ -51,6 +52,15 @@ run log and keeps its last known cars.
 - `dealers.json`: written by discovery and read by the build. Committed, so the scheduled build does not rediscover.
 - `sources.json`: hand-kept places that are not a dealer's website. One row per Craigslist city: `kind` names the reader, `site` the city's Craigslist name, and `floor` how far the place's listings may thin out between two reads before the read is taken as broken (0.5 for Craigslist, where listings come and go faster than on a lot; 0.8 otherwise).
 
+## The city impound auction (seen 2026-11-21, from a home connection)
+
+- Venture Auctions sells the city's impounded vehicles most Wednesdays, about 60 a week, on www.venture-auctions.com. The route, the fields and the buyer's rules are in `research/10-routing-impound-auctions.md`.
+- A live read took 12 requests, three seconds apart, with no refusal: the list of coming sales, the 25 November sale (no lots posted yet: they go up the Monday evening before), the list of finished sales, and the sales of 18 and 11 November in four and five pages. 186 lots, every one with a VIN that vPIC decoded; 180 sold, 6 marked no-sale; the middle sale price was $575.
+- Earlier sales, back to 6 May 2026, are read ten a run until all 31 are on record. After that an ordinary run is three requests plus the coming sale's pages.
+- A lot states no mileage, keys, running condition or title, so it has no asking price and is never ranked with the cars for sale. It lives on its own page. A lot with a result is closed the moment it is recorded: "sold", or "ended_unsold" for one the auctioneer marked no-sale.
+- `sources.json` carries the auction's own charges (`premium` 0.1, `fee` 10, `card` 0.04), which the page uses to say what a bid costs before tax.
+- Not seen yet: what an open lot shows once prebidding starts (read as the bid so far, as the auctioneer's sister site showed it), and whether the site answers GitHub's servers.
+
 ## Craigslist (seen 2026-11-21, from a home connection)
 
 - `https://memphis.craigslist.org/search/cto` answered the tracker's own name with 120 by-owner results in the page. Each result's address ends in a key that did not change between two reads minutes apart; that key is the listing's id here. Whether it lasts the life of a listing has not been watched yet: if it does not, every listing will look new each day.
@@ -62,7 +72,8 @@ run log and keeps its last known cars.
 - Private cars are judged against a catalogue that is almost all dealers, who ask more, so most show as under similar cars. A car whose seller says the title is not clean is shown without a judgement.
 - Six more cities were added the same day, the nearest by Craigslist's own list of areas: Jonesboro (60 miles), North Mississippi (62), Jackson, TN (77), Southeast Missouri (122), Little Rock (130) and Muscle Shoals (136). Read in full from a home connection that evening, they gave 11, 40, 20, 13, 82 and 7 listings, none shared with another city: 291 private cars on the page with Memphis's 120, of which 112 are within 60 miles, 143 between 60 and 150, and 36 beyond. 235 were named to a known model and 29 had enough similar cars to be judged; 8 of those sat a tenth or more under. Since then no car is left off for being far: each carries its distance from its own map pin, and the page filters and sorts by it. A listing two cities both show is one car.
 - A search page stops at about 360 results. None of these cities is near that, but a page of 300 or more is asked again in five price bands, which the page honours (`min_price=5000&max_price=10000` gave 55 results, all from $5,000 to $10,000).
-- The seller's description and phone number are not kept.
+- The seller's description and phone number are not kept. The title is, and a title that says why the car is cheap ("mechanic special", "as-is", "needs", "won't start", "for parts", "no title": `CAUTIONS` in `build.py`) puts that on the card and keeps the car out of the comparison. On 2026-11-21 the car at the very top of the page was a "Mechanic Special / As-Is" minivan marked $6,200 under; 6 of 271 private cars carry such a warning.
+- A private car posted again (the same year, mileage, price and map pin, and no VIN) is shown once. That folded 20 listings away on 2026-11-21, 11 of them one Greenwood, Mississippi seller posting each of his cars in two cities.
 
 ## Reading every site at once
 
@@ -152,7 +163,7 @@ Seen on the build of 2026-11-21 (3,602 cars):
 
 ## Not built yet
 
-- Readers for the city impound auction, government surplus and lenders' repossessions, and the Facebook extension.
+- Readers for government surplus, tow-lot lien sales and lenders' repossessions, and the Facebook extension.
 - Craigslist's by-dealer listings, and reposts of one car under a new listing.
 - Linking the same car across listings by photo or phone. Today only a shared VIN links two listings.
 - A net figure after tax, title and repairs, and how fast each model sells. Price-cut ordering needs a few days of history to mean anything.

@@ -152,3 +152,35 @@ export function sorted(cars, how, direction) {
     return turn * (left - right);
   });
 }
+
+// ---- auction lots ------------------------------------------------------------------------------------------------
+// A lot has a bid, not an asking price, and nobody states its mileage: it is never ranked with the cars for sale.
+
+/** What winning a lot at `price` costs before tax: the auction's premium on top, and its fee per lot.
+ *  Null without a price or without the auction's charges. */
+export function lotCost(price, place) {
+  if (!price || !place) return null;
+  return price * (1 + (place.premium || 0)) + (place.fee || 0);
+}
+
+// What each lot order measures; a lot that lacks the figure goes last.
+const lotFigures = {
+  price: (lot) => lot.price ?? null,
+  gap: (lot) => (lot.asks && lot.price ? lot.price - lot.asks.median : null),      // furthest under first
+};
+
+/** A new list of lots: "sale" (each sale in turn, lots in the order they are called), "newest" (latest result
+ *  first), "price" (lowest first) or "gap" (the bid furthest under what such cars ask first). */
+export function lotsSorted(lots, how) {
+  if (lotFigures[how]) {
+    const figure = lotFigures[how];
+    return [...lots].sort((a, b) => {
+      const [left, right] = [figure(a), figure(b)];
+      if (left == null || right == null) return (left == null) - (right == null);
+      return left - right;
+    });
+  }
+  const turn = how === "newest" ? -1 : 1;
+  return [...lots].sort((a, b) => turn * (a.ends || "").localeCompare(b.ends || "")
+    || (how === "newest" ? 0 : (Number(a.lot) || 0) - (Number(b.lot) || 0)));
+}

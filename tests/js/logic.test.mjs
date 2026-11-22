@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DIRECTIONS, amount, sorted, under, visible } from "../../site/logic.js";
+import { DIRECTIONS, amount, lotCost, lotsSorted, sorted, under, visible } from "../../site/logic.js";
 
 const camry = { id: "a:1", title: "2012 Toyota Camry LE", make: "toyota", model: "Camry", year: 2012, body: "sedan", drive: "fwd", fuel: "hybrid", kind: "lot",
   price: 6500, was: null, drop: 0, miles: 134200, days: 4, dealer_key: "a", typical: 8000, similar: 6 };
@@ -282,4 +282,39 @@ test("nearest first, cars of unknown distance last", () => {
   const delivered = { ...camry, id: "d", dealer_miles: null };
   assert.deepEqual(ids(sorted([far, delivered, near], "away")), ["n", "f", "d"]);
   assert.equal(DIRECTIONS.away, "asc");
+});
+
+// ---- auction lots ------------------------------------------------------------------------------------------------
+
+const impound = { key: "v", premium: 0.1, fee: 10, card: 0.04 };
+const lotA = { id: "v:1-1", title: "2012 TOYOTA CAMRY LE", make: "toyota", model: "Camry", price: 450, kind: "bid", ends: "2026-11-25T15:30", lot: "2",
+  asks: { median: 7500, count: 3 } };
+const lotB = { id: "v:1-2", title: "2009 SCION TC", make: "scion", model: "tC", price: 10, kind: "starting", ends: "2026-11-25T15:30", lot: "10", asks: null };
+const lotC = { id: "v:0-9", title: "2015 FORD F-150", make: "ford", model: "F-150", price: 2600, kind: "sold", ends: "2026-11-18T16:02", lot: "1",
+  asks: { median: 14000, count: 5 } };
+
+test("what a winning bid costs adds the buyer's premium and the fee per lot", () => {
+  assert.equal(lotCost(575, impound), 642.5);                 // the auction's own example: $575 is $642.50 in cash
+  assert.equal(lotCost(0, impound), null);
+  assert.equal(lotCost(575, undefined), null);
+  assert.equal(lotCost(575, { key: "w" }), 575);
+});
+
+test("lots run in sale order: the sale first, then the lot number as a number", () => {
+  assert.deepEqual(ids(lotsSorted([lotB, lotC, lotA], "sale")), ["v:0-9", "v:1-1", "v:1-2"]);
+});
+
+test("results run newest first", () => {
+  assert.deepEqual(ids(lotsSorted([lotC, lotA, lotB], "newest")), ["v:1-1", "v:1-2", "v:0-9"]);
+});
+
+test("lots by price, and by how far the bid sits under what such cars ask, unknown last", () => {
+  assert.deepEqual(ids(lotsSorted([lotA, lotB, lotC], "price")), ["v:1-2", "v:1-1", "v:0-9"]);
+  assert.deepEqual(ids(lotsSorted([lotB, lotA, lotC], "gap")), ["v:0-9", "v:1-1", "v:1-2"]);
+});
+
+test("the search and make filters work on lots as they do on cars", () => {
+  assert.deepEqual(ids(visible([lotA, lotB, lotC], { text: "camry" })), ["v:1-1"]);
+  assert.deepEqual(ids(visible([lotA, lotB, lotC], { make: "ford" })), ["v:0-9"]);
+  assert.deepEqual(ids(visible([lotA, lotB, lotC], { maxPrice: 1000 })), ["v:1-1", "v:1-2"]);
 });

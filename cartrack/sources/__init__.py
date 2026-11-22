@@ -4,10 +4,11 @@ Each reader is `read(place, get, seen, known=())` and gives back `(listings, com
 `place` is a row of sources.json. `known` holds the source ids the catalogue already has in full, so a reader
 that needs a page per listing asks for each one once and afterwards only for what the list page says: price,
 title and whether it is still there. The catalogue keeps what an earlier read gave wherever a later one is
-silent."""
+silent. For an auction, `known` holds the lots already recorded as over, so a finished sale is read once."""
 
-from . import craigslist
+from . import auctioneersoftware, craigslist
 
 SOURCES = {
+    "auctioneersoftware": auctioneersoftware.read,
     "craigslist": craigslist.read,
 }

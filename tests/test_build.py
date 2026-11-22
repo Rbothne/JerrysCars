@@ -188,6 +188,110 @@ class ReadSources(unittest.TestCase):
         self.assertEqual(self.run_build({}), [])
 
 
+IMPOUND = {"key": "venture-auctions.com", "kind": "auctioneersoftware", "site": "https://www.venture-auctions.com",
+           "name": "City of Memphis impound auction", "floor": 0, "premium": 0.1, "fee": 10, "card": 0.04}
+
+
+def lot(source_id, seen=NOW, **fields):
+    return make_listing("venture-auctions.com", source_id, **{
+        "url": f"https://www.venture-auctions.com/auctions/5361/lot/{source_id}", "title": "2012 TOYOTA CAMRY LE SEDAN",
+        "seen": seen, "channel": "auction", "price": 900, "price_kind": "sold", "ends": "2026-11-18T15:47",
+        "year": 2012, "make": "toyota", "model": "Camry", "extra": {"auction": "Impound 11/18", "lot": "1", "bids": 3},
+        **fields})
+
+
+class Auctions(unittest.TestCase):
+    def setUp(self):
+        self.db = catalogue.open_catalogue(":memory:")
+        self.addCleanup(self.db.close)
+        self.known = []
+
+    def run_build(self, *lots, now=NOW):
+        def read(place, get, seen, known=()):
+            self.known.append(set(known))
+            return [dict(one, seen=seen) for one in lots], True
+        return build.read_sources(self.db, [IMPOUND], {"auctioneersoftware": read}, None, now, say=lambda line: None)
+
+    def ended(self):
+        return [tuple(row) for row in self.db.execute("SELECT source_id, gone, gone_how FROM listing ORDER BY source_id")]
+
+    def test_a_lot_with_a_result_is_over_from_the_moment_it_is_recorded_and_says_how(self):
+        self.run_build(lot("5361-1"), lot("5361-2", price=500, price_kind="reserve_not_met", ends="2026-11-18T16:10"),
+                       lot("5362-1", price=10, price_kind="starting", ends="2026-11-25T15:30"))
+        self.assertEqual(self.ended(), [("5361-1", "2026-11-18T15:47", "sold"), ("5361-2", "2026-11-18T16:10", "ended_unsold"),
+                                        ("5362-1", None, None)])
+
+    def test_the_reader_is_told_which_lots_are_already_recorded_as_over(self):
+        self.run_build(lot("5361-1"), lot("5362-1", price=10, price_kind="starting", ends="2026-11-25T15:30"))
+        self.run_build(lot("5362-1", price=10, price_kind="starting", ends="2026-11-25T15:30"), now="2026-11-22T05:00")
+        self.assertEqual(self.known, [set(), {"5361-1"}])
+
+    def test_a_coming_lot_that_turns_up_sold_is_closed_and_the_sold_ones_stay_closed(self):
+        self.run_build(lot("5362-1", price=450, price_kind="bid", ends="2026-11-25T15:30"))
+        report = self.run_build(lot("5362-1", price=700, ends="2026-11-25T15:52"), now="2026-11-25T23:00")
+        self.assertEqual(self.ended(), [("5362-1", "2026-11-25T15:52", "sold")])
+        report = self.run_build(now="2026-11-26T11:00")              # nothing coming, nothing new: an ordinary week
+        self.assertEqual((report[0]["ok"], self.ended()), (True, [("5362-1", "2026-11-25T15:52", "sold")]))
+
+    def test_an_auction_lot_is_not_among_the_cars_for_sale(self):
+        self.run_build(lot("5361-1"), lot("5362-1", price=450, price_kind="bid", ends="2026-11-25T15:30"))
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        shown = build.page_data(self.db, [PECK], NOW, places=[IMPOUND], area=AREA)["cars"]
+        self.assertEqual([one["id"] for one in shown], ["peckdaniel.com:1"])
+
+    def test_the_auction_page_gets_the_coming_lots_and_every_result_newest_first(self):
+        self.run_build(lot("5360-9", ends="2026-11-11T15:40", price=650), lot("5361-1"),
+                       lot("5361-2", price=500, price_kind="reserve_not_met", ends="2026-11-18T16:10"),
+                       lot("5362-1", price=450, price_kind="bid", ends="2026-11-25T15:30", vin="1HGCM82633A004352",
+                           photos=["https://images.example/a.jpg"], extra={"auction": "Impound 11/25", "lot": "7", "bids": 4}))
+        data = build.auction_data(self.db, [CRAIGSLIST, IMPOUND], NOW)
+        self.assertEqual(data["built"], NOW)
+        self.assertEqual(data["places"], [{"key": "venture-auctions.com", "name": "City of Memphis impound auction",
+                                           "premium": 0.1, "fee": 10, "card": 0.04}])
+        self.assertEqual([(one["id"], one["price"], one["sold"]) for one in data["results"]],
+                         [("venture-auctions.com:5361-2", 500, False), ("venture-auctions.com:5361-1", 900, True),
+                          ("venture-auctions.com:5360-9", 650, True)])
+        coming = data["lots"][0]
+        self.assertEqual({name: coming[name] for name in ("id", "title", "price", "kind", "bids", "ends", "auction", "lot",
+                                                          "vin", "photo", "place", "parts_only")},
+                         {"id": "venture-auctions.com:5362-1", "title": "2012 TOYOTA CAMRY LE SEDAN", "price": 450, "kind": "bid",
+                          "bids": 4, "ends": "2026-11-25T15:30", "auction": "Impound 11/25", "lot": "7",
+                          "vin": "1HGCM82633A004352", "photo": "https://images.example/a.jpg",
+                          "place": "venture-auctions.com", "parts_only": False})
+
+    def test_a_coming_lot_is_set_beside_what_such_cars_fetched_here_and_what_they_ask(self):
+        self.run_build(lot("5360-1", price=600), lot("5360-2", price=900, year=2014), lot("5360-3", price=1500, year=2010),
+                       lot("5360-4", price=4000, year=2020),                       # eight model years off: not the same car
+                       lot("5360-5", price=300, price_kind="reserve_not_met"),     # no sale: not a price anyone paid
+                       lot("5360-6", price=700, model="Corolla"),
+                       lot("5362-1", price=10, price_kind="starting", ends="2026-11-25T15:30"))
+        for number, asking in enumerate((6500, 7500, 8000)):
+            catalogue.record(self.db, car("peckdaniel.com", str(number), price=asking))
+        catalogue.record(self.db, car("peckdaniel.com", "new", price=31000, year=2024))
+        coming = build.auction_data(self.db, [IMPOUND], NOW)["lots"][0]
+        self.assertEqual(coming["before"], {"count": 3, "median": 900, "low": 600, "high": 1500})
+        self.assertEqual(coming["asks"], {"count": 3, "median": 7500, "low": 6500, "high": 8000})
+        self.assertIsNone(coming["back"])
+
+    def test_a_lot_with_nothing_to_set_it_beside_says_nothing(self):
+        self.run_build(lot("5362-1", price=10, price_kind="starting", ends="2026-11-25T15:30", model="Avalon"))
+        coming = build.auction_data(self.db, [IMPOUND], NOW)["lots"][0]
+        self.assertEqual((coming["before"], coming["asks"], coming["back"]), (None, None, None))
+
+    def test_a_car_back_from_an_earlier_sale_says_when_and_how_that_ended(self):
+        self.run_build(lot("5359-4", vin="1HGCM82633A004352", price=800, ends="2026-11-04T15:40"),
+                       lot("5361-2", vin="1HGCM82633A004352", price=500, price_kind="reserve_not_met", ends="2026-11-18T16:10"),
+                       lot("5362-1", vin="1HGCM82633A004352", price=10, price_kind="starting", ends="2026-11-25T15:30"))
+        coming = build.auction_data(self.db, [IMPOUND], NOW)["lots"][0]
+        self.assertEqual(coming["back"], {"when": "2026-11-18", "price": 500, "sold": False})
+
+    def test_the_funnel_counts_an_auctions_coming_lots_as_shown(self):
+        self.run_build(lot("5361-1"), lot("5362-1", price=10, price_kind="starting", ends="2026-11-25T15:30"))
+        data = build.page_data(self.db, [], NOW, places=[IMPOUND], area=AREA)
+        self.assertEqual(build.funnel(self.db, data, build.auction_data(self.db, [IMPOUND], NOW)),
+                         [{"source": "venture-auctions.com", "live": 1, "priced": 1, "shown": 1}])
+
+
 class SideBySide(unittest.TestCase):
     """Every source is asked at once, each at its own site's pace, so a run takes as long as its slowest site
     and not as long as all of them added up."""
@@ -476,6 +580,34 @@ class PageData(unittest.TestCase):
         self.assertEqual([(one["id"], one["title_status"], one["typical"]) for one in shown],
                          [("memphis.craigslist.org:clean", "clean", None), ("memphis.craigslist.org:rebuilt", "rebuilt", None),
                           ("peckdaniel.com:1", None, None)])
+
+    def test_a_private_car_whose_own_title_says_why_it_is_cheap_carries_the_warning_and_is_not_judged(self):
+        # top of the page on 2026-11-21: "2020 Chrysler Pacifica - Mechanic Special / As-Is - $3,500", "$6,200 under"
+        catalogue.record(self.db, detailed("a", title="2020 Chrysler Pacifica \u2013 Mechanic Special / As-Is \u2013 $3,500"))
+        catalogue.record(self.db, detailed("b", title="2009 Chevy Impala LT - AS IS - Needs Major Work"))
+        catalogue.record(self.db, detailed("c", title="2012 toyota camry le, needs nothing, new tires"))
+        catalogue.record(self.db, detailed("d", title="2004 Ford Ranger wont start, for parts or project, no title"))
+        catalogue.record(self.db, car("peckdaniel.com", "1", title="2014 Ford F-150 AS-IS Special"))      # a dealer's own wording
+        given = []
+        shown = self.shown(judge=lambda cars, year: given.extend(car["id"] for car in cars) or {
+            car["id"]: {"typical": 9000, "similar": 4} for car in cars})
+        self.assertEqual([one["cautions"] for one in shown],
+                         [["mechanic special", "as-is"], ["as-is", "needs work"], [],
+                          ["not running", "for parts", "project", "no title"], []])
+        self.assertEqual(given, ["memphis.craigslist.org:c", "peckdaniel.com:1"])
+        self.assertEqual([one["typical"] for one in shown], [None, None, 9000, None, 9000])
+
+    def test_one_car_posted_twice_by_its_seller_is_shown_once_and_says_so(self):
+        # 2026-11-21: "Jeep Cherokee overland 3.0 L Diesel 2014" twice, 123,340 miles and $5,000 both times, one pin
+        same = {"year": 2014, "miles": 123340, "price": 5000, "lat": 37.43, "lon": -90.96}
+        catalogue.record(self.db, detailed("first", title="Jeep Cherokee overland 3.0 L Diesel 2014", posted="2026-11-01T15:00", **same))
+        catalogue.record(self.db, detailed("again", title="Jeep Cherokee overland 3.0L Diesel 2014", posted="2026-11-03T15:00", **same))
+        catalogue.record(self.db, detailed("other", title="2014 Jeep Cherokee", **{**same, "miles": 98000}))
+        catalogue.record(self.db, detailed("unpinned", **{**same, "lat": None, "lon": None}))
+        shown = self.shown()
+        self.assertEqual([(one["id"], one["places"], one["also"]) for one in shown],
+                         [("memphis.craigslist.org:again", 2, []), ("memphis.craigslist.org:other", 1, []),
+                          ("memphis.craigslist.org:unpinned", 1, [])])
 
     def test_the_page_lists_the_places_read_beside_the_dealers(self):
         catalogue.record(self.db, detailed("a"))

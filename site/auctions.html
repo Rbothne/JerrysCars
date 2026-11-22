@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Memphis impound auction</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>Memphis impound auction</h1>
+  <nav><a href="index.html">Cars for sale</a><a href="auctions.html" aria-current="page">Impound auction</a></nav>
+  <p id="built">Loading the latest read&hellip;</p>
+</header>
+<main>
+  <form id="filters" onsubmit="return false">
+    <div class="row">
+      <label class="wide">Search
+        <input type="search" name="text" placeholder="year, make, model" autocomplete="off">
+      </label>
+      <label>Show
+        <select name="view">
+          <option value="lots">Coming up</option>
+          <option value="results">Results of past sales</option>
+        </select>
+      </label>
+      <label>Make
+        <select name="make"><option value="">Any make</option></select>
+      </label>
+      <label>Top price
+        <input type="text" name="maxPrice" inputmode="numeric" autocomplete="off" placeholder="any">
+      </label>
+      <label>Sort by
+        <select name="order">
+          <option value="sale">Sale order</option>
+          <option value="newest">Newest result</option>
+          <option value="price">Bid or price, lowest first</option>
+          <option value="gap">Furthest under what such cars ask</option>
+        </select>
+      </label>
+    </div>
+  </form>
+  <p id="count" aria-live="polite"></p>
+  <ul id="cars"></ul>
+  <p id="empty" hidden></p>
+  <button id="more" type="button" hidden>Show more</button>
+</main>
+<footer>
+  <p>The City of Memphis sells impounded vehicles most Wednesdays through Venture Auctions, online, with the lot list posted the Monday evening before. This page reads that site twice a day. Bidding, registration and the rules are the auctioneer's: follow a lot's link.</p>
+  <p>A lot states its year, make, model and VIN and shows a photo. It does not state mileage, whether there are keys, whether it runs, or what title it has, because nobody has checked. The buyer gets a city bill of sale, not a title. So nothing here says a lot is a bargain. What is shown beside a lot is only what can be known: what the same make and model within three model years sold for at these sales before, what such cars are asking around Memphis today on the other page, and whether this very car has been through a sale already.</p>
+  <p>"Costs about" adds the auctioneer's buyer's premium and its fee per lot to the bid. Sales tax, a further charge for paying by card, towing and whatever the car needs are not in it.</p>
+</footer>
+<script type="module" src="auctions.js"></script>
+</body>
+</html>

@@ -222,6 +222,13 @@ def close_out(db, source, seen_ids, when, floor=FLOOR):
     return len(missing)
 
 
+def end(db, listing_id, when, how):
+    """Mark one listing over at `when` because its source says so outright: "sold", or "ended_unsold" for an
+    auction lot that drew bids and was not sold. Unlike close_out and age_out, nothing is inferred."""
+    with db:
+        db.execute("UPDATE listing SET gone = ?, gone_how = ? WHERE id = ?", (when, how, listing_id))
+
+
 def age_out(db, source, when, days=UNSEEN_DAYS):
     """Mark `source`'s live listings gone when no read has found them for `days`, though reads since have found
     others. Returns how many. close_out decides "gone" only from a whole read that did not shrink, and some

@@ -53,6 +53,7 @@ function card(car) {
     : car.fees ? `includes ${dollars.format(car.fees)} dealer fee` : "dealer fee not stated";
   body.append(make("p", "total", car.total ? `${fee} · about ${dollars.format(car.total)} with tax` : fee));
   if (TITLES[car.title_status]) body.append(make("div", "branded", `${TITLES[car.title_status]}, the seller says`));
+  if ((car.cautions || []).length) body.append(make("div", "branded", `The seller's title says: ${car.cautions.join(", ")}`));
   const below = under(car);
   if (below && below.share >= NOTABLE) {
     const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);
@@ -77,7 +78,7 @@ function card(car) {
   const economy = car.mpg ? ` · ${car.mpg[0]}/${car.mpg[1]} mpg` : "";
   body.append(make("p", "facts", `${miles}${yearly}${economy} · listed ${car.days} day${car.days === 1 ? "" : "s"}`));
   const away = car.dealer_miles == null ? "" : ` · ${Math.round(car.dealer_miles)} mi away`;
-  const also = car.places > 1 ? ` · on ${car.places} sites` : "";
+  const also = car.places <= 1 ? "" : (car.also || []).length ? ` · on ${car.places} sites` : ` · posted ${car.places} times`;
   const where = car.where ? ` · ${car.where}` : "";
   body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${where}${away}${also}`));
   if (car.vin) body.append(make("p", "vin", car.vin));
