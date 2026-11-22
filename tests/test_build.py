@@ -119,7 +119,7 @@ def private(source_id, seen=NOW, **fields):
 
 def detailed(source_id, seen=NOW, **fields):
     return private(source_id, seen, **{"posted": "2026-11-20T15:00", "year": 2012, "miles": 140000,
-                                       "title_status": "clean", "extra": {"makemodel": "toyota camry le"}, **fields})
+                                       "title_status": "clean", "extra": {"makemodel": "toyota camry le", "flags": []}, **fields})
 
 
 class ReadSources(unittest.TestCase):
@@ -598,19 +598,51 @@ class PageData(unittest.TestCase):
 
     def test_a_private_car_whose_own_title_says_why_it_is_cheap_carries_the_warning_and_is_not_judged(self):
         # top of the page on 2026-11-21: "2020 Chrysler Pacifica - Mechanic Special / As-Is - $3,500", "$6,200 under"
-        catalogue.record(self.db, detailed("a", title="2020 Chrysler Pacifica \u2013 Mechanic Special / As-Is \u2013 $3,500"))
-        catalogue.record(self.db, detailed("b", title="2009 Chevy Impala LT - AS IS - Needs Major Work"))
-        catalogue.record(self.db, detailed("c", title="2012 toyota camry le, needs nothing, new tires"))
-        catalogue.record(self.db, detailed("d", title="2004 Ford Ranger wont start, for parts or project, no title"))
+        unread = {"extra": {"makemodel": "as typed"}}       # read before descriptions were: the title is all there is
+        catalogue.record(self.db, detailed("a", title="2020 Chrysler Pacifica \u2013 Mechanic Special / As-Is \u2013 $3,500", **unread))
+        catalogue.record(self.db, detailed("b", title="2009 Chevy Impala LT - AS IS - Needs Major Work", **unread))
+        catalogue.record(self.db, detailed("c", title="2012 toyota camry le, needs nothing, new tires", **unread))
+        catalogue.record(self.db, detailed("d", title="2004 Ford Ranger wont start, for parts or project, no title", **unread))
         catalogue.record(self.db, car("peckdaniel.com", "1", title="2014 Ford F-150 AS-IS Special"))      # a dealer's own wording
         given = []
         shown = self.shown(judge=lambda cars, year: given.extend(car["id"] for car in cars) or {
             car["id"]: {"typical": 9000, "similar": 4} for car in cars})
         self.assertEqual([one["cautions"] for one in shown],
-                         [["mechanic special", "as-is"], ["as-is", "needs work"], [],
-                          ["not running", "for parts", "project", "no title"], []])
+                         [["not running"], ["needs work"], [], ["not running", "no title"], []])
         self.assertEqual(given, ["memphis.craigslist.org:c", "peckdaniel.com:1"])
         self.assertEqual([one["typical"] for one in shown], [None, None, 9000, None, 9000])
+
+    def test_once_a_listings_own_page_has_been_read_for_faults_its_flags_stand_and_the_title_is_not_guessed_from(self):
+        catalogue.record(self.db, detailed("a", title="Honda Accord, needs nothing", condition="good", extra={
+            "makemodel": "honda accord", "flags": ["mechanical_fault", "damage", "trade_seller"], "pin": 22}))
+        catalogue.record(self.db, detailed("b", title="Mechanic special", extra={"makemodel": "ford focus", "flags": []}))
+        catalogue.record(self.db, detailed("c", condition="fair", extra={"makemodel": "kia rio", "flags": [], "pin": 7}))
+        first, second, third = self.shown(judge=lambda cars, year: {car["id"]: {"typical": 9000, "similar": 4} for car in cars})
+        self.assertEqual((first["cautions"], first["notes"], first["approx"], first["typical"]),
+                         (["a mechanical fault"], ["damage mentioned", "reads like a trader's advert"], True, None))
+        self.assertEqual((second["cautions"], second["notes"], second["approx"], second["typical"]), ([], [], False, 9000))
+        self.assertEqual((third["cautions"], third["approx"], third["typical"]), (["condition: fair"], False, None))
+
+    def test_two_listings_that_share_a_photo_are_one_car_whatever_else_differs(self):
+        # 2026-11-21: photo ids found 22 reposted cars; year, miles, price and pin missed a price raised by $950
+        catalogue.record(self.db, detailed("first", price=4850, photo_ids=["aaa", "bbb"]))
+        catalogue.record(self.db, detailed("again", price=5800, year=2013, photo_ids=["bbb", "ccc"]))
+        catalogue.record(self.db, detailed("third", price=5800, photo_ids=["ccc"]))
+        catalogue.record(self.db, detailed("other", price=4850, photo_ids=["zzz"]))
+        shown = self.shown()
+        self.assertEqual([(one["id"], one["price"], one["places"]) for one in shown],
+                         [("memphis.craigslist.org:first", 4850, 3), ("memphis.craigslist.org:other", 4850, 1)])
+
+    def test_the_reader_is_asked_again_for_a_classified_whose_page_was_read_before_its_words_were(self):
+        catalogue.record(self.db, detailed("old", extra={"makemodel": "toyota camry le"}))
+        catalogue.record(self.db, detailed("new"))
+        seen = []
+
+        def read(place, get, when, known=()):
+            seen.append(set(known))
+            return [], True
+        build.read_sources(self.db, [CRAIGSLIST], {"craigslist": read}, None, NOW, say=lambda line: None)
+        self.assertEqual(seen, [{"new"}])
 
     def test_one_car_posted_twice_by_its_seller_is_shown_once_and_says_so(self):
         # 2026-11-21: "Jeep Cherokee overland 3.0 L Diesel 2014" twice, 123,340 miles and $5,000 both times, one pin

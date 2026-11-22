@@ -15,7 +15,7 @@ import re
 import statistics
 import sys
 
-from cartrack import catalogue, cost, fetch, identify, value, vin
+from cartrack import catalogue, cost, fetch, flags, identify, value, vin
 from cartrack.dealers import miles_between
 from cartrack.listings import num
 from cartrack.readers import READERS
@@ -29,20 +29,6 @@ ONE_COMPANY = ("craigslist.org",)                 # every host under these is pa
 BRANDED = ("rebuilt", "salvage", "lien")          # titles that are priced against clean cars and never the other way
 OVER = {"sold": "sold", "reserve_not_met": "ended_unsold"}     # a price that is a sale's result -> how the listing ended
 NEAR_YEARS = 3         # model years either side that count as the same car when auction lots are set beside others
-# What a private seller's own title says about why the car is cheap. Only the title is read: the description
-# is not kept. "needs nothing" is not a warning, and "rebuilt" alone usually means an engine, so only a title is.
-CAUTIONS = (
-    ("mechanic special", r"mechanic'?s?\s+special"),
-    ("as-is", r"\bas[\s-]+is\b"),
-    ("needs work", r"\bneeds?\b(?!\s+nothing)"),
-    ("not running", r"\bnot\s+running\b|\b(?:won'?t|wont|doesn'?t|does\s+not|will\s+not)\s+(?:start|run)\b|\bnon[\s-]?running\b|\bno\s+start\b"),
-    ("for parts", r"\bfor\s+parts\b|\bparts\s+(?:only|car)\b"),
-    ("blown", r"\bblown\b"),
-    ("project", r"\bproject\b"),
-    ("no title", r"\bno\s+title\b|\bbill\s+of\s+sale\b"),
-    ("salvage", r"\bsalvage\b"),
-    ("rebuilt title", r"\brebuilt\s+title\b"),
-)
 
 
 def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR):
@@ -95,7 +81,8 @@ def source_jobs(db, places, readers, get, now):
         if not read:
             continue
         known = {row[0] for row in db.execute(
-            "SELECT source_id FROM listing WHERE source = ? AND (posted IS NOT NULL OR gone_how IN ('sold', 'ended_unsold'))",
+            "SELECT source_id FROM listing WHERE source = ? AND (posted IS NOT NULL OR gone_how IN ('sold', 'ended_unsold')) "
+            "AND (channel != 'classified' OR extra LIKE '%\"flags\"%')",     # a classified read before its words were: once more
             (place["key"],))}
         jobs.append({"key": place["key"], "platform": place["kind"], "source": place["key"],
                      "floor": place.get("floor", catalogue.FLOOR),
@@ -193,11 +180,6 @@ def _engine(decoded):
             "litres": _number(decoded.get("DisplacementL")), "weight_class": weight.group(1) if weight else None}
 
 
-def cautions(title):
-    """The warnings in a private seller's title, in CAUTIONS' own order: ["mechanic special", "as-is"]."""
-    return [name for name, pattern in CAUTIONS if re.search(pattern, title or "", re.I)]
-
-
 def _away(row, dealer, area):
     """Miles from the home point: the dealer's lot, else the listing's own map pin, else unknown."""
     if dealer.get("miles") is not None:
@@ -219,11 +201,15 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
     ("private"), `where` (the seller's word for the neighbourhood, else the city) and, as `dealer_miles`, its
     distance from its own map pin. No car is left off for being far: the page filters by distance. A listing
     without a VIN that two places both show (one address) is one car. `title_status` is what the seller says
-    of the title, and `cautions` what the seller's own title warns of ("mechanic special", "as-is").
+    of the title. `cautions` is what the seller's own words say is wrong (cartrack/flags.py: from the whole
+    listing once its page has been read with them, from the title alone until then) and a condition box of
+    "fair" or "salvage"; `notes` what they mention that is only worth knowing. `approx` says the map pin is
+    the middle of a ZIP code, so the distance is good to about five miles.
     `basis`, `window`, `low` and `high` say what a car's `typical` stands on (cartrack/value.py). A car with a
     rebuilt, salvage or lien title is priced against clean cars and is never one of the cars others are
-    priced from; one for parts, with no title, or with a caution gets no figure at all. A private car posted again by its seller (the same year, mileage, price and map pin, and no VIN
-    to tell by) is one car, shown once."""
+    priced from; one for parts, with no title, or with a caution gets no figure at all. A private car posted
+    again by its seller is one car, shown once: told by a shared photo, or, for a listing with no photos, by
+    the same year, mileage, price and map pin."""
     by_key = {dealer["key"]: dealer for dealer in (*dealers, *places)}
     decodes = {vin: json.loads(row) for vin, row in db.execute("SELECT vin, row_json FROM vin_decode")}
     vehicles = {}                                 # one physical car -> the listings of it; a group lists a car on each of its sites
@@ -238,11 +224,17 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
         away = _away(row, dealer, area)
         on_lot = row["channel"] == "dealer_site"
         vehicle = row["vehicle_id"] if row["vin"] else addresses.setdefault(row["url"], row["vehicle_id"])
-        if not row["vin"] and not on_lot and None not in (row["year"], row["miles"], row["lat"], row["lon"]):
+        shots = [("photo", shot) for shot in json.loads(row["photo_ids"] or "[]")] if not (row["vin"] or on_lot) else []
+        if shots:                                     # one car posted twice shows the same photos
+            vehicle = next((addresses[shot] for shot in shots if shot in addresses), vehicle)
+            addresses.update((shot, vehicle) for shot in shots)
+        elif not row["vin"] and not on_lot and None not in (row["year"], row["miles"], row["lat"], row["lon"]):
             again = ("posted again", row["year"], row["miles"], row["price"], row["lat"], row["lon"])
             vehicle = addresses.setdefault(again, vehicle)
         photos = json.loads(row["photos"] or "[]")
         extra = json.loads(row["extra"] or "{}")
+        raised = [] if on_lot else extra["flags"] if "flags" in extra else flags.found(row["title"])
+        worn = [f"condition: {row['condition']}"] if not on_lot and row["condition"] in ("fair", "salvage") else []
         years = max(int(now[:4]) - row["year"] + 1, 1) if row["year"] else None
         money = _money(row, extra)
         vehicles.setdefault(vehicle, []).append({
@@ -260,7 +252,8 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
             "kind": "online" if dealer.get("platform") in ONLINE else "private" if row["seller_type"] == "private" else "lot",
             "seller": row["seller_type"] or ("dealer" if on_lot else None),
             "title_status": row["title_status"],
-            "cautions": [] if on_lot else cautions(row["title"]),
+            "cautions": flags.say(raised, flags.OUT) + worn, "notes": flags.say(raised, flags.SHOWN),
+            "approx": extra.get("pin") == 22,
             "where": None if on_lot else extra.get("where") or row["city"],
             "dealer": row["seller_name"] if not dealer else dealer.get("name"), "dealer_key": row["source"],
             "dealer_miles": away, "city": row["city"], "state": row["state"],

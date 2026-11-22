@@ -80,7 +80,10 @@ class Craigslist(unittest.TestCase):
         self.assertIsNone(suv["updated"])
         self.assertEqual(len(suv["photos"]), 8)
         self.assertEqual(suv["photos"][0], "https://images.craigslist.org/00K0K_34mMtDiAmy4_0x20oM_600x450.jpg")
-        self.assertEqual(suv["extra"], {"post_id": "8004309228", "makemodel": "ford expedition xl", "where": "EAST MEMPHIS"})
+        self.assertEqual(suv["extra"], {"post_id": "8004309228", "makemodel": "ford expedition xl", "where": "EAST MEMPHIS",
+                                        "flags": [], "pin": 22})
+        self.assertEqual(suv["photo_ids"], ["34mMtDiAmy4", "eJpu9SbM8pB", "lkePLp4rR2I", "kW4skSRPOcC", "cuilwiEHeR3",
+                                            "guEfx21sPov", "aN2szU8hS5C", "ipZdmT196Gm"])
 
     def test_the_sellers_make_and_model_are_kept_as_typed_for_the_catalogue_to_name(self):
         self.read()
@@ -97,6 +100,35 @@ class Craigslist(unittest.TestCase):
         self.assertEqual((truck["drive"], truck["fuel"], truck["miles"]), ("4wd", "diesel", 74300))
         self.assertEqual(truck["extra"]["cylinders"], 8)
         self.assertNotIn("where", truck["extra"])                            # this seller named no neighbourhood
+
+    def described(self, words):
+        """The Expedition's page with a description put back (the fixture has none: sellers' words are not kept)."""
+        return page("craigslist_expedition.html", '<section id="postingbody">\n</section>',
+                    '<section id="postingbody">\n<div class="print-information print-qrcode-container">\n'
+                    '<p class="print-qrcode-label">QR Code Link to This Post</p>\n<div class="print-qrcode" '
+                    f'data-location="https://www.craigslist.org/view/d/x/y">\n</div>\n</div>\n{words}\n</section>')
+
+    def test_what_the_description_says_is_wrong_is_kept_as_flags_and_the_words_are_not_kept(self):
+        import json
+        words = "Runs fine but it won't shift into reverse.<br>Needs trans. NO LEAKS. Call 901-555-0100 ask for Sam"
+        self.read({EXPEDITION: self.described(words)})
+        suv = self.cars["xz6FPUVRjeUCWxy7xGL77Q"]
+        self.assertEqual(suv["extra"]["flags"], ["not_running", "mechanical_fault", "needs_work"])
+        kept = json.dumps(suv)
+        for word in ("reverse", "555", "Sam", "QR Code"):
+            self.assertNotIn(word, kept)
+
+    def test_a_sound_cars_description_raises_no_flag_and_says_so_with_an_empty_list(self):
+        self.read({EXPEDITION: self.described("One owner, cold A/C, needs nothing. No accidents, no leaks.")})
+        self.assertEqual(self.cars["xz6FPUVRjeUCWxy7xGL77Q"]["extra"]["flags"], [])
+
+    def test_how_exact_the_pin_is_and_the_post_this_one_repeats_are_kept(self):
+        again = page("craigslist_discovery.html", "</head>", "<script>var pID = 8004062892; var repost_of = 7991204417;"
+                                                             " window.cl = {'repost_of': 7991204417};</script></head>")
+        self.read({DISCOVERY: again})
+        rover = self.cars["gBzhCkQLqke86wy25xZCeW"]
+        self.assertEqual((rover["extra"]["pin"], rover["extra"]["repost_of"]), (99, "7991204417"))
+        self.assertNotIn("repost_of", self.cars["xz6FPUVRjeUCWxy7xGL77Q"]["extra"])
 
     def test_a_vin_is_read_when_the_seller_gives_one(self):
         with_vin = page("craigslist_expedition.html", '<div class="attr auto_fuel_type">',

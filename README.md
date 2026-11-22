@@ -30,7 +30,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 357 Python tests
+    py -m unittest discover -s tests -t .       # 374 Python tests
     node --test tests/js/logic.test.mjs         # 60 page-logic tests
 
 ## Publishing the page
@@ -72,8 +72,11 @@ run log and keeps its last known cars.
 - Until 2026-11-21 private cars were judged against dealers' prices and nearly all of the few that were judged showed as under. The value model now knows who is selling: on that day's catalogue 76 clean-title private cars get a figure from similar cars (25 close at 14% from the ask in the median, 51 wider at 25%), 91 a rough figure from the model alone (37%), and 9 are marked, at 30% or more under. A rebuilt, salvage or lien title is shown beside what a clean one asks and never marked.
 - Six more cities were added the same day, the nearest by Craigslist's own list of areas: Jonesboro (60 miles), North Mississippi (62), Jackson, TN (77), Southeast Missouri (122), Little Rock (130) and Muscle Shoals (136). Read in full from a home connection that evening, they gave 11, 40, 20, 13, 82 and 7 listings, none shared with another city: 291 private cars on the page with Memphis's 120, of which 112 are within 60 miles, 143 between 60 and 150, and 36 beyond. 235 were named to a known model and 29 had enough similar cars to be judged; 8 of those sat a tenth or more under. Since then no car is left off for being far: each carries its distance from its own map pin, and the page filters and sorts by it. A listing two cities both show is one car.
 - A search page stops at about 360 results. None of these cities is near that, but a page of 300 or more is asked again in five price bands, which the page honours (`min_price=5000&max_price=10000` gave 55 results, all from $5,000 to $10,000).
-- The seller's description and phone number are not kept. The title is, and a title that says why the car is cheap ("mechanic special", "as-is", "needs", "won't start", "for parts", "no title": `CAUTIONS` in `build.py`) puts that on the card and keeps the car out of the comparison. On 2026-11-21 the car at the very top of the page was a "Mechanic Special / As-Is" minivan marked $6,200 under; 6 of 271 private cars carry such a warning.
-- A private car posted again (the same year, mileage, price and map pin, and no VIN) is shown once. That folded 20 listings away on 2026-11-21, 11 of them one Greenwood, Mississippi seller posting each of his cars in two cities.
+- The seller's description and phone number are not kept. The description is read once, when the listing's page is, for the faults it states, and only the names of the flags it raises are stored (`cartrack/flags.py`, worked out on 90 listings: `research/11-listing-quality.md`). "Won't start", "needs transmission", a warning light or a leak, "no title": these go on the card as what the seller says and keep the car out of the comparison, as does a condition box of "fair" or "salvage". Damage, money still owed and a dealer's turns of phrase are shown and nothing more. Denials are not faults: "no leaks", "needs nothing", "need to sell". On the 90 listings nothing was flagged wrongly; on new text expect about one wrong in ten.
+- Listings read before 2026-11-22 are asked for once more, so that their descriptions are read: about 290 requests on the first run after this change. Until then such a listing is flagged from its title alone.
+- A private car posted again is shown once. Two listings that share a photo are one car (22 reposted cars on 2026-11-21, 17 of them one seller's cars posted in both Memphis and North Mississippi); a listing with no photos falls back to the same year, mileage, price and map pin.
+- Two map pins in three are the middle of a ZIP code, not where the car is (`extra.pin` 22). The page says "about" before those distances: they are good to about five miles.
+- Not built: grouping one seller's listings to mark a trader with several cars (five groups, 42 cars, on 2026-11-21); only a trader's wording is flagged.
 
 ## Reading every site at once
 

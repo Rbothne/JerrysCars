@@ -64,7 +64,12 @@ function card(car) {
     : car.fees ? `includes ${dollars.format(car.fees)} dealer fee` : "dealer fee not stated";
   body.append(make("p", "total", car.total ? `${fee} · about ${dollars.format(car.total)} with tax` : fee));
   if (TITLES[car.title_status]) body.append(make("div", "branded", `${TITLES[car.title_status]}, the seller says`));
-  if ((car.cautions || []).length) body.append(make("div", "branded", `The seller's title says: ${car.cautions.join(", ")}`));
+  if ((car.cautions || []).length) body.append(make("div", "branded", `The seller says: ${car.cautions.join(", ")}`));
+  if ((car.notes || []).length) {
+    const row = make("div", "marks");
+    row.append(...car.notes.map((note) => make("span", "mark", note[0].toUpperCase() + note.slice(1))));
+    body.append(row);
+  }
   const below = marked(car);
   if (below) {
     const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);
@@ -89,7 +94,7 @@ function card(car) {
   const yearly = car.per_year == null ? "" : ` (${whole.format(car.per_year)} a year)`;
   const economy = car.mpg ? ` · ${car.mpg[0]}/${car.mpg[1]} mpg` : "";
   body.append(make("p", "facts", `${miles}${yearly}${economy} · listed ${car.days} day${car.days === 1 ? "" : "s"}`));
-  const away = car.dealer_miles == null ? "" : ` · ${Math.round(car.dealer_miles)} mi away`;
+  const away = car.dealer_miles == null ? "" : ` · ${car.approx ? "about " : ""}${Math.round(car.dealer_miles)} mi away`;
   const also = car.places <= 1 ? "" : (car.also || []).length ? ` · on ${car.places} sites` : ` · posted ${car.places} times`;
   const where = car.where ? ` · ${car.where}` : "";
   body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${where}${away}${also}`));

@@ -6,7 +6,12 @@ address). The last part of that address names the listing and did not change bet
 else is on the listing's own page, so each listing is asked for once: year, the make and model as the seller
 typed them, odometer, title status, fuel, transmission, body, and where given drive, colour, condition,
 cylinders and VIN; the map pin; the posted and updated times; and a schema.org block with the photos, city,
-state and ZIP. The seller's description and phone number are not kept.
+state and ZIP. The seller's description and phone number are not kept: the description is read once, for the
+faults it states (cartrack/flags.py), and only the names of those flags are stored, in `extra.flags`.
+
+Also kept from the page: every photo's id (`photo_ids`: one car posted twice shares its photos, which is how
+a repost is told), `extra.pin` (how exact the map pin is: 22 is the middle of a ZIP code, as two pins in three
+are; 5 or 7 is a street), and `extra.repost_of`, the post this one says it repeats.
 
 Make and model stay as typed in `extra.makemodel`: sellers write "chevy silverado lt 4x4", and
 cartrack/identify.py names it from the models the catalogue already knows. A VIN, when a seller gives one,
@@ -28,7 +33,7 @@ import datetime
 import json
 import re
 
-from .. import fetch
+from .. import fetch, flags
 from ..listings import make_listing, num
 from ..readers import CARDS_READ, NotRead, drive, text
 
@@ -114,9 +119,17 @@ def _details(page, this_year):
     address, geo = place.get("address") or {}, place.get("geo") or {}
     photos = product.get("image") or []
     lat, lon = (pin.group(1), pin.group(2)) if pin else (geo.get("latitude"), geo.get("longitude"))
+    exact = re.search(r'id="map"[^>]*data-accuracy="(\d+)"', page)
+    again = re.search(r"""repost_of['"]?\s*:\s*['"]?(\d+)""", page)
+    headed = re.search(r'<span id="titletextonly">(.*?)</span>', page, re.S)
+    body = re.search(r'<section id="postingbody">(.*?)</section>', page, re.S)
+    said = re.sub(r'<div class="print-information.*?</div>\s*</div>', " ", body.group(1), flags=re.S) if body else ""
+    shots = list(dict.fromkeys(re.findall(r"images\.craigslist\.org/[0-9A-Za-z]+_([0-9A-Za-z]+)_", page)))
 
     extra = {"post_id": post.group(1) if post else None, "makemodel": text(typed.group(1)) if typed else None,
-             "cylinders": int(num(attrs.get("cylinders"))) if num(attrs.get("cylinders")) else None, "odometer": as_typed}
+             "cylinders": int(num(attrs.get("cylinders"))) if num(attrs.get("cylinders")) else None, "odometer": as_typed,
+             "flags": flags.found(text(headed.group(1)) if headed else None, text(said)),   # the words go no further
+             "pin": int(exact.group(1)) if exact else None, "repost_of": again.group(1) if again else None}
     return {
         "year": year, "miles": miles, "vin": attrs.get("vin"),
         "title_status": _TITLES.get((attrs.get("title status") or "").lower()),
@@ -125,7 +138,7 @@ def _details(page, this_year):
         "city": address.get("addressLocality"), "state": address.get("addressRegion"), "zip": address.get("postalCode"),
         "lat": lat, "lon": lon, "geo_how": "pin" if lat and lon else None,
         "posted": _utc(when.get("posted")), "updated": _utc(when.get("updated")),
-        "photos": photos if isinstance(photos, list) else [photos],
+        "photos": photos if isinstance(photos, list) else [photos], "photo_ids": shots,
         "extra": {name: value for name, value in extra.items() if value is not None},
     }
 
