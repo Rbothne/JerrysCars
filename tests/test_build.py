@@ -189,7 +189,7 @@ class ReadSources(unittest.TestCase):
 
 
 IMPOUND = {"key": "venture-auctions.com", "kind": "auctioneersoftware", "site": "https://www.venture-auctions.com",
-           "name": "City of Memphis impound auction", "floor": 0, "premium": 0.1, "fee": 10, "card": 0.04}
+           "name": "City of Memphis impound auction", "floor": 0, "premium": 0.1, "fee": 10, "card": 0.04, "ready": 1500}
 
 
 def lot(source_id, seen=NOW, **fields):
@@ -247,7 +247,8 @@ class Auctions(unittest.TestCase):
         data = build.auction_data(self.db, [CRAIGSLIST, IMPOUND], NOW)
         self.assertEqual(data["built"], NOW)
         self.assertEqual(data["places"], [{"key": "venture-auctions.com", "name": "City of Memphis impound auction",
-                                           "premium": 0.1, "fee": 10, "card": 0.04}])
+                                           "premium": 0.1, "fee": 10, "card": 0.04, "ready": 1500}])
+        self.assertEqual(data["assume"]["title"], 180)
         self.assertEqual([(one["id"], one["price"], one["sold"]) for one in data["results"]],
                          [("venture-auctions.com:5361-2", 500, False), ("venture-auctions.com:5361-1", 900, True),
                           ("venture-auctions.com:5360-9", 650, True)])
@@ -585,6 +586,39 @@ class PageData(unittest.TestCase):
                                  ("1", False, "dealer")])
         self.assertEqual({one["id"].split(":")[1]: one["typical"] for one in shown},
                          {"clean": 9000, "lien": 9000, "rebuilt": 9000, "parts": None, "none": None, "1": 9000})
+
+    def figured(self, **found):
+        """One private car asking $4,850, judged as `found` says."""
+        catalogue.record(self.db, detailed("a", price=4850))
+        answer = {"typical": 4600, "resale": 4624, "similar": 4, "basis": "close", "window": (2, 30000),
+                  "low": 4100, "high": 5800, **found}
+        return self.shown(judge=lambda cars, year: {car["id"]: answer for car in cars})[0]
+
+    def test_a_car_judged_from_similar_cars_says_what_to_pay_to_have_a_thousand_left(self):
+        # research/11-profit-estimate.md: a Terrain asked $4,850 would have to be bought at about $2,300
+        shown = self.figured()
+        self.assertEqual((shown["pay"], shown["pay_low"], shown["pay_high"], shown["far_under"]), (2300, 1900, 3300, False))
+        self.assertEqual(build.page_data(self.db, [], NOW)["assume"]["left"], 1000)
+
+    def test_a_rough_figure_gives_no_price_to_pay(self):
+        shown = self.figured(basis="rough", window=None, similar=0)
+        self.assertEqual((shown["pay"], shown["pay_low"], shown["pay_high"]), (None, None, None))
+
+    def test_a_car_asking_far_under_the_others_is_told_apart_from_a_bargain(self):
+        shown = self.figured(typical=14100, resale=14100, low=12700, high=17600)
+        self.assertEqual((shown["far_under"], shown["pay"]), (True, None))
+
+    def test_a_car_not_worth_enough_to_leave_the_sum_has_no_price_to_pay(self):
+        shown = self.figured(typical=1500, resale=1500, low=1300, high=1900)
+        self.assertEqual((shown["pay"], shown["far_under"]), (None, False))
+
+    def test_a_branded_title_or_a_stated_fault_gives_no_price_to_pay(self):
+        catalogue.record(self.db, detailed("b", price=4850, title_status="rebuilt"))
+        catalogue.record(self.db, detailed("c", price=4850, condition="fair"))
+        self.figured()
+        answer = {"typical": 4600, "resale": 4624, "similar": 4, "basis": "close", "window": (2, 30000), "low": 4100, "high": 5800}
+        shown = self.shown(judge=lambda cars, year: {car["id"]: answer for car in cars})
+        self.assertEqual([one["pay"] for one in shown], [2300, None, None])
 
     def test_a_car_says_what_its_figure_stands_on(self):
         catalogue.record(self.db, car("peckdaniel.com", "1"))

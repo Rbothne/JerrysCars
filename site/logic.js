@@ -147,11 +147,12 @@ const figures = {
   peryear: (car) => car.per_year ?? null,
   days: (car) => car.days ?? null,
   away: (car) => car.dealer_miles ?? null,
+  room: (car) => (car.pay != null ? car.pay - car.price : null),       // asking least above, or furthest under, what to pay
 };
 
 /** The direction each field starts in: the one a buyer usually wants (cheapest, newest, biggest cut). */
 export const DIRECTIONS = { value: "desc", price: "asc", drop: "desc", share: "desc",
-  year: "desc", miles: "asc", peryear: "asc", days: "asc", away: "asc" };
+  year: "desc", miles: "asc", peryear: "asc", days: "asc", away: "asc", room: "desc" };
 
 /** A new list ordered by the field `how`, "asc" or "desc" (the field's own direction when not given).
  *  Cars that tie keep the order they came in; cars that lack the figure go last. */
@@ -174,6 +175,20 @@ export function sorted(cars, how, direction) {
 export function lotCost(price, place) {
   if (!price || !place) return null;
   return price * (1 + (place.premium || 0)) + (place.fee || 0);
+}
+
+/** Tennessee sales tax on a vehicle bought in Memphis, as cartrack/cost.py works it out. */
+export function tennesseeTax(price) {
+  return Math.round((0.07 * price + 0.0275 * Math.min(price, 1600) + 0.0275 * Math.min(Math.max(price - 1600, 0), 1600)) * 100) / 100;
+}
+
+/** What a lot won at `price` has cost by the time it is for sale again: the auction's charges, tax on them,
+ *  the title, the advert, a month's insurance, and what the auction's own row assumes for getting an impounded
+ *  car away and running (`place.ready`). It is also what the car must sell for to get the money back. */
+export function lotAllIn(price, place, assume) {
+  const paid = lotCost(price, place);
+  if (paid == null || !assume) return null;
+  return paid + tennesseeTax(paid) + assume.title + (place.ready ?? assume.ready) + assume.advert + assume.hold;
 }
 
 // What each lot order measures; a lot that lacks the figure goes last.

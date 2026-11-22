@@ -15,6 +15,10 @@ Every figure says what it stands on, because they are not equally good (research
 - "rough": no neighbours at all, so the model's figure alone. Worth showing, never worth a mark.
 
 `low` and `high` are where six in ten asking prices fell around such a figure when this was measured.
+`resale` is the same figure at a private seller's level whoever is selling the car now: what someone who
+bought it could expect to ask for it. For a private seller's car it is `typical` itself. It is never more
+than the dealers' level: the model's term for private pickups, fitted on old trucks, would otherwise say a
+new truck bought from a dealer could be sold on for more.
 
 Three things here exist for private sellers' cars, which are older and cheaper than what the lots hold:
 
@@ -165,7 +169,7 @@ def _hundreds(dollars):
 
 
 def judge(cars, this_year):
-    """{car id: {"typical", "similar", "basis", "window", "low", "high"}} for every car that can be priced.
+    """{car id: {"typical", "resale", "similar", "basis", "window", "low", "high"}} for every car that can be priced.
     `cars` are dicts with id, price, year, miles, make and model, and whatever is known of seller ("private"
     or not), trim, body, drive, fuel, series, cylinders, litres and weight_class. Each should be one vehicle,
     listed once. `basis` is "close", "wide" or "rough"; `window` the (years, miles) the neighbours were found
@@ -190,7 +194,6 @@ def judge(cars, this_year):
     judged = {}
     for car in usable:
         weights = fitted[fold[car["id"]]]             # the model that never saw this car
-        modelled = _priced(weights, features[car["id"]])
         others = [other for other in by_model.get((car["make"], car["model"]), ()) if other["id"] != car["id"]]
         near, window = [], None
         for years, miles in LADDER:
@@ -199,18 +202,27 @@ def judge(cars, this_year):
             if len(near) >= MIN_SIMILAR:
                 window = (years, miles)
                 break
-        if window:
-            # What each neighbour would ask at this car's year and mileage, from this car's kind of seller. Only
-            # the model's slopes are used: the neighbour's trim, engine and the rest stay its own and cancel
-            # out, so a trim word the model misreads cannot mislead both estimates at once.
+        basis = "rough" if not window else "close" if window == LADDER[0] else "wide"
+
+        def asked(seller):
+            """What cars like this one ask when `seller` is the kind of seller asking."""
+            modelled = _priced(weights, _features({**car, "seller": seller}, this_year, counts))
+            if not window:
+                return modelled
+            # What each neighbour would ask at this car's year and mileage, from that kind of seller. Only the
+            # model's slopes are used: the neighbour's trim, engine and the rest stay its own and cancel out,
+            # so a trim word the model misreads cannot mislead both estimates at once.
             moved = [other["price"] * _priced(weights, _features(
-                {**other, "year": car["year"], "miles": car["miles"], "seller": car.get("seller")}, this_year, counts))
+                {**other, "year": car["year"], "miles": car["miles"], "seller": seller}, this_year, counts))
                 / _priced(weights, features[other["id"]]) for other in near]
-            typical, basis = min(modelled, statistics.median(moved)), "close" if window == LADDER[0] else "wide"
-        else:
-            typical, basis, near = modelled, "rough", []
-        low, high = RANGES[("private" if car.get("seller") == "private" else "dealer", basis)]
-        typical = _hundreds(typical)
-        judged[car["id"]] = {"typical": typical, "similar": len(near), "basis": basis, "window": window,
+            return min(modelled, statistics.median(moved))
+
+        private = car.get("seller") == "private"
+        typical = _hundreds(asked(car.get("seller")))
+        low, high = RANGES[("private" if private else "dealer", basis)]
+        # A private seller is not taken to get more than a dealer asks, whatever the pickup term says of a new truck.
+        resale = _hundreds(min(asked("private"), asked(None)))
+        judged[car["id"]] = {"typical": typical, "resale": min(typical, resale) if private else resale,
+                             "similar": len(near) if window else 0, "basis": basis, "window": window,
                              "low": _hundreds(typical * low), "high": _hundreds(typical * high)}
     return judged

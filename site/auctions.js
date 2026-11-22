@@ -1,6 +1,6 @@
 // The auction page: the lots build.py wrote to data/auctions.json. Choosing and ordering are in logic.js.
 
-import { amount, lotCost, lotsSorted, visible } from "./logic.js";
+import { amount, lotAllIn, lotCost, lotsSorted, visible } from "./logic.js";
 
 const STEP = 120;                                  // lots drawn at a time
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -47,6 +47,11 @@ function card(lot, over) {
       ? `bid so far${bids}${cost ? ` · costs about ${dollars.format(cost)} before tax` : ""}`
       : `opens at ${dollars.format(lot.price || 0)}`));
     if (lot.ends) body.append(make("p", "sale", `Sale starts ${hour.format(when(lot.ends))}${lot.lot ? ` · lot ${lot.lot}` : ""}`));
+  }
+  const place = data.places.find((one) => one.key === lot.place);
+  const allIn = (over ? lot.sold : lot.kind === "bid") ? lotAllIn(lot.price, place, data.assume) : null;
+  if (allIn) {
+    body.append(make("p", "beside", `All in about ${dollars.format(Math.round(allIn / 50) * 50)}: what it must sell for to get the money back`));
   }
   if (lot.parts_only) body.append(make("div", "branded", "For parts only: cannot be registered"));
   if (lot.back) {

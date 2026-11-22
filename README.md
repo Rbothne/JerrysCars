@@ -18,7 +18,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
 | VINs | `cartrack/vin.py` | Check digit, and identity from NHTSA's free vPIC service, 50 VINs a request. A decoded VIN's identity wins over the dealer's wording. |
 | Value | `cartrack/value.py` | What cars like each one usually ask, from the other cars in the catalogue: the lower of a price model and the car's nearest neighbours, with what the figure stands on (close matches, wider ones, or the model alone) and the range asking prices fall in. Private sellers' cars are set beside private sellers' prices. How far to trust it is in `research/09-value.md` and `research/11-valuing-old-cars.md`. |
-| Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). Title and registration are not in it. |
+| Cost | `cartrack/cost.py` | Tennessee sales tax on a vehicle, for the total shown under each price (price, the dealer's stated fee, tax). And what to pay for a car so that $1,000 is left after selling it on privately: what private sellers ask for one like it, less 8% talked down, tax on the purchase, title, $500 to get it ready, an advert and a month's insurance. The assumptions are in `ASSUME`, with their sources in `research/11-profit-estimate.md`. |
 | Build | `build.py` | Reads every source and every dealer that has a reader, updates the catalogue, decodes new VINs, names the listings that have only a seller's words, judges value, writes `site/data/cars.json`. |
 | Page | `site/` | Plain HTML and JavaScript, no build step. `logic.js` holds the search, filtering and ordering. Search reads title, make and model, ignores punctuation ("crv", "f150", "f 150"), knows a few nicknames ("chevy", "vw") and, for a word that matches no car, falls back to names one slip away ("camery"). Filters: within so many miles, sold by (private sellers or dealers), make, model, price, year, mileage, body, drive, fuel, source, local lots only, price cuts only, below typical price only, no branded titles. Sorts by one field (value, price, price cut, year, mileage, miles a year, days listed, distance), ascending or descending, and opens with the cars furthest under similar ones first. |
 | Auction page | `site/auctions.html`, `site/auctions.js` | The impound auction's coming lots and every past result, from `site/data/auctions.json`. Beside a coming lot: what such cars sold for there before, what they ask around Memphis, and whether this car has been through a sale already. Styles are shared with the cars page in `site/style.css`. |
@@ -30,8 +30,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 374 Python tests
-    node --test tests/js/logic.test.mjs         # 60 page-logic tests
+    py -m unittest discover -s tests -t .       # 386 Python tests
+    node --test tests/js/logic.test.mjs         # 63 page-logic tests
 
 ## Publishing the page
 
@@ -90,6 +90,20 @@ Hosts that belong to one company share one clock (`ONE_COMPANY` in `build.py`): 
 so seven cities and their listings' pages together ask Craigslist one request every three seconds, exactly
 as one city did. That makes Craigslist the slowest lane whenever many listings are new, about 15 minutes for
 the 300 of a first read, and a few seconds on an ordinary run, when only new listings are asked for.
+
+## What to pay
+
+Seen on the catalogue of 2026-11-21 (3,913 cars): 3,301 carry a price to pay, 73 of them private sellers' cars.
+12 ask at or under it and 20 more ask within $1,000 above. Bought at its asking price and sold on privately,
+nearly every car loses the tax, the costs and what the buyer talks off; the figure says how far under the
+asking price a car would have to be bought. It is given only where the car's figure stands on similar cars,
+the title is clean and the seller reports nothing wrong, and never where the asking price is under 40% of
+what the others ask (2 cars), which is more often a fault than a bargain. The page can sort by it: "Asking
+price against what to pay".
+
+An auction lot gets no such figure, because nothing is known of its condition. Its card says what the lot has
+cost all in once it could be for sale again, with $1,500 assumed for a tow, a key and repairs (`ready` on the
+auction's row of `sources.json`): a $575 lot comes to about $2,450.
 
 ## When a source has cars and the page shows none
 

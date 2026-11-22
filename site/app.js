@@ -9,6 +9,7 @@ const form = document.getElementById("filters");
 const list = document.getElementById("cars");
 const more = document.getElementById("more");
 let cars = [];
+let assume = {};
 let shown = STEP;
 
 function make(tag, className, text) {
@@ -77,6 +78,11 @@ function card(car) {
     body.append(badge);
   }
   if (car.typical) body.append(make("p", "beside", footing(car)));
+  if (car.far_under) body.append(make("div", "branded", "Priced far under the others: find out why first"));
+  if (car.pay != null) {
+    const range = car.pay_low != null && car.pay_high != null ? ` (${dollars.format(car.pay_low)} to ${dollars.format(car.pay_high)})` : "";
+    body.append(make("p", "beside", `To have ${dollars.format(assume.left || 0)} left after selling it on: pay about ${dollars.format(car.pay)}${range}`));
+  }
   if (car.drop) body.append(make("div", "cut", `was ${dollars.format(car.was)}, down ${dollars.format(car.drop)}`));
   const marks = [];
   if (car.one_owner === true) marks.push("One owner (Carfax)");
@@ -157,6 +163,7 @@ try {
   if (!answer.ok) throw new Error(`data/cars.json answered ${answer.status}`);
   const data = await answer.json();
   cars = data.cars;
+  assume = data.assume || {};
   choices(form.elements.make, cars, "make");
   choices(form.elements.body, cars, "body");
   const select = form.elements.dealer;

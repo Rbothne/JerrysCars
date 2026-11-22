@@ -180,6 +180,10 @@ def _engine(decoded):
             "litres": _number(decoded.get("DisplacementL")), "weight_class": weight.group(1) if weight else None}
 
 
+def _hundred(dollars):
+    return None if dollars is None else int(round(dollars / 100)) * 100
+
+
 def _away(row, dealer, area):
     """Miles from the home point: the dealer's lot, else the listing's own map pin, else unknown."""
     if dealer.get("miles") is not None:
@@ -205,7 +209,9 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
     listing once its page has been read with them, from the title alone until then) and a condition box of
     "fair" or "salvage"; `notes` what they mention that is only worth knowing. `approx` says the map pin is
     the middle of a ZIP code, so the distance is good to about five miles.
-    `basis`, `window`, `low` and `high` say what a car's `typical` stands on (cartrack/value.py). A car with a
+    `basis`, `window`, `low` and `high` say what a car's `typical` stands on (cartrack/value.py). `pay` is what
+    to pay for it to have `assume.left` over after selling it on, with `pay_low` and `pay_high` for the range
+    such cars' prices fall in; `far_under` says the asking price is too far under the others to be believed. A car with a
     rebuilt, salvage or lien title is priced against clean cars and is never one of the cars others are
     priced from; one for parts, with no title, or with a caution gets no figure at all. A private car posted
     again by its seller is one car, shown once: told by a shared photo, or, for a listing with no photos, by
@@ -280,12 +286,22 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
         fair = judged.get(car["id"], {}) if car["id"] in sound or car["id"] in apart else {}
         for name in ("typical", "similar", "basis", "window", "low", "high"):
             car[name] = fair.get(name)
+        # What to pay for it so that a sum is left after selling it on (cartrack/cost.py). Only where the figure
+        # stands on similar cars and nothing is known to be wrong; and not where the asking price is so far
+        # under that the likelier story is a fault or a bait advert.
+        firm = car["id"] in sound and fair.get("basis") in ("close", "wide") and fair.get("resale")
+        car["far_under"] = bool(firm and car["price"] < cost.FAR_UNDER * fair["typical"])
+        car["pay"] = car["pay_low"] = car["pay_high"] = None
+        if firm and not car["far_under"]:
+            car["pay"], car["pay_low"], car["pay_high"] = (
+                _hundred(cost.pay(fair["resale"] * share)) for share in (1, fair["low"] / fair["typical"], fair["high"] / fair["typical"]))
     counts = {}
     for car in cars:
         for seller in (car["dealer_key"], *car["also"]):
             counts[seller] = counts.get(seller, 0) + 1
     return {
         "built": now,
+        "assume": cost.ASSUME,
         "cars": cars,
         "dealers": [{"key": line["dealer"], "name": by_key.get(line["dealer"], {}).get("name"),
                      "cars": counts.get(line["dealer"], 0), "ok": line["ok"]} for line in report or []],
@@ -340,9 +356,9 @@ def auction_data(db, places, now):
                              if last else None})
     results = sorted(({**lot(row), "sold": row["gone_how"] == "sold"} for row in over),
                      key=lambda one: (one["ends"] or "", one["id"]), reverse=True)
-    return {"built": now, "lots": lots, "results": results,
+    return {"built": now, "lots": lots, "results": results, "assume": cost.ASSUME,
             "places": [{"key": place["key"], "name": place.get("name"), "premium": place.get("premium"),
-                        "fee": place.get("fee"), "card": place.get("card")}
+                        "fee": place.get("fee"), "card": place.get("card"), "ready": place.get("ready")}
                        for place in places if place.get("kind") in ("auctioneersoftware",)]}
 
 

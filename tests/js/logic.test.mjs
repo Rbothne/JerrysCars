@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DIRECTIONS, amount, lotCost, lotsSorted, marked, sorted, under, visible } from "../../site/logic.js";
+import { DIRECTIONS, amount, lotAllIn, lotCost, lotsSorted, marked, sorted, tennesseeTax, under, visible } from "../../site/logic.js";
 
 const camry = { id: "a:1", title: "2012 Toyota Camry LE", make: "toyota", model: "Camry", year: 2012, body: "sedan", drive: "fwd", fuel: "hybrid", kind: "lot",
   price: 6500, was: null, drop: 0, miles: 134200, days: 4, dealer_key: "a", typical: 8000, similar: 6 };
@@ -142,7 +142,7 @@ test("cars that tie keep the order they came in, whichever way the order runs", 
 
 test("each field starts in the direction a buyer usually wants", () => {
   assert.deepEqual(DIRECTIONS, { value: "desc", price: "asc", drop: "desc", share: "desc",
-    year: "desc", miles: "asc", peryear: "asc", days: "asc", away: "asc" });
+    year: "desc", miles: "asc", peryear: "asc", days: "asc", away: "asc", room: "desc" });
 });
 
 test("lowest price first", () => {
@@ -349,4 +349,29 @@ test("below typical only, and the best-value order, go by the mark and leave rou
   const fair = figure(9500, { basis: "close" });
   assert.deepEqual(ids(visible([close, rough, branded, fair], { underOnly: true })), ["f:8000"]);
   assert.deepEqual(ids(sorted([fair, rough, branded, close], "value")), ["f:8000", "f:9500", "f:3000", "f:2000"]);
+});
+
+// ---- buying to sell ------------------------------------------------------------------------------------------------
+
+test("tax in the page matches the build's worked table", () => {
+  assert.equal(tennesseeTax(3000), 292.5);
+  assert.equal(tennesseeTax(10000), 788);
+  assert.equal(tennesseeTax(1000), 97.5);
+});
+
+test("all in, a $575 lot must sell for about $2,450 to get the money back", () => {
+  const assume = { title: 180, ready: 500, advert: 5, hold: 60 };
+  const place = { key: "v", premium: 0.1, fee: 10, ready: 1500 };
+  assert.equal(Math.round(lotAllIn(575, place, assume)), 2450);      // research/11-profit-estimate.md, lot 25 of 18 November
+  assert.equal(Math.round(lotAllIn(575, { key: "v", premium: 0.1, fee: 10 }, assume)), 1450);
+  assert.equal(lotAllIn(0, place, assume), null);
+  assert.equal(lotAllIn(575, place, undefined), null);
+});
+
+test("asking price against what to pay: the car with most room first, cars with no such figure last", () => {
+  const room = { id: "r", price: 4000, pay: 4600 };
+  const near = { id: "n", price: 5000, pay: 4700 };
+  const far = { id: "f", price: 9000, pay: 2300 };
+  const none = { id: "x", price: 3000, pay: null };
+  assert.deepEqual(ids(sorted([far, none, near, room], "room")), ["r", "n", "f", "x"]);
 });

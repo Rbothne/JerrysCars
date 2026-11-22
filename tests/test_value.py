@@ -112,6 +112,27 @@ class Judge(unittest.TestCase):
         dealers = sorted(abs(judged[one["id"]]["typical"] / one["price"] - 1) for one in cars if not one.get("seller"))
         self.assertLess(dealers[len(dealers) // 2], 0.06)           # and the dealers' cars are judged as well as before
 
+    def test_resale_is_what_a_private_seller_would_ask_whoever_is_selling_now(self):
+        cars = self.private_market()
+        judged = value.judge(cars, YEAR)
+        mine = next(one for one in cars if one.get("seller") == "private")
+        self.assertEqual(judged[mine["id"]]["resale"], judged[mine["id"]]["typical"])
+        old = [one for one in cars if not one.get("seller") and one["year"] <= 2018]       # eight years old and more
+        ratio = sorted(judged[one["id"]]["resale"] / judged[one["id"]]["typical"] for one in old)
+        self.assertLess(ratio[len(ratio) // 2], 0.85)               # 3% a year under, in this market
+        self.assertGreater(ratio[len(ratio) // 2], 0.6)
+
+    def test_resale_is_never_above_what_dealers_ask_even_where_private_pickups_ask_more_than_private_cars(self):
+        # 2026-11-21: 141 new dealer pickups came out "worth more resold privately", from a term fitted on old trucks
+        cars = self.private_market()
+        for one in cars:
+            if one["model"] == "F-150":
+                one["body"] = "pickup"
+                if one.get("seller") == "private":
+                    one["price"] = round(one["price"] * 1.5)
+        judged = value.judge(cars, YEAR)
+        self.assertTrue(all(found["resale"] <= found["typical"] for found in judged.values()))
+
     def test_a_private_cars_figure_has_the_wider_range_private_asking_prices_show(self):
         cars = self.private_market()
         judged = value.judge(cars, YEAR)
