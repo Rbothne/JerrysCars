@@ -1,6 +1,6 @@
 // The page: load the cars build.py wrote, and show the ones the filters allow. The choosing is in logic.js.
 
-import { DIRECTIONS, NOTABLE, amount, sorted, under, visible } from "./logic.js";
+import { DIRECTIONS, amount, marked, sorted, visible } from "./logic.js";
 
 const STEP = 120;                                  // cars drawn at a time
 const dollars = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
@@ -39,6 +39,17 @@ const web = (address) => (/^https?:\/\//.test(address || "") ? address : null);
 const TITLES = { rebuilt: "Rebuilt title", salvage: "Salvage title", lien: "Lien on the title", missing: "No title",
   parts_only: "Parts only", lemon: "Lemon title" };
 
+/** One line on what similar cars ask and what that figure stands on. */
+function footing(car) {
+  const about = dollars.format(car.typical);
+  if (car.title_status && car.title_status !== "clean") return `A clean-title one asks about ${about}`;
+  const range = car.low && car.high ? `, most ${dollars.format(car.low)} to ${dollars.format(car.high)}` : "";
+  const who = car.seller === "private" ? "Private sellers ask" : "Similar cars ask";
+  if (car.basis === "rough") return `Rough figure: ${who.toLowerCase()} about ${about}${range}. None like it for sale.`;
+  const near = car.window ? ` within ${car.window[0]} years and ${whole.format(car.window[1])} miles` : "";
+  return `${who} about ${about}${range} · ${car.similar} like it${near}`;
+}
+
 function card(car) {
   const item = make("li", "car");
   const photo = web(car.photo) ? make("img", "photo") : make("div", "photo");
@@ -54,12 +65,13 @@ function card(car) {
   body.append(make("p", "total", car.total ? `${fee} · about ${dollars.format(car.total)} with tax` : fee));
   if (TITLES[car.title_status]) body.append(make("div", "branded", `${TITLES[car.title_status]}, the seller says`));
   if ((car.cautions || []).length) body.append(make("div", "branded", `The seller's title says: ${car.cautions.join(", ")}`));
-  const below = under(car);
-  if (below && below.share >= NOTABLE) {
+  const below = marked(car);
+  if (below) {
     const badge = make("div", "under", `${dollars.format(below.amount)} under similar cars`);
     badge.title = `Similar cars ask about ${dollars.format(car.typical)}, going by ${car.similar} of them.`;
     body.append(badge);
   }
+  if (car.typical) body.append(make("p", "beside", footing(car)));
   if (car.drop) body.append(make("div", "cut", `was ${dollars.format(car.was)}, down ${dollars.format(car.drop)}`));
   const marks = [];
   if (car.one_owner === true) marks.push("One owner (Carfax)");

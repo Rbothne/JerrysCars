@@ -58,23 +58,95 @@ class Judge(unittest.TestCase):
         judged = value.judge(market() + others + [plain], YEAR)
         self.assertLess(judged["lot:8900"]["typical"], plain["price"] * 1.08)
 
-    def test_the_judgement_says_how_many_similar_cars_it_rests_on(self):
+    def test_the_judgement_says_how_many_similar_cars_it_rests_on_and_how_near_they_are(self):
         judged = value.judge(market(), YEAR)
-        self.assertTrue(all(one["similar"] >= 3 for one in judged.values()))
+        self.assertTrue(all(one["similar"] >= 3 for one in judged.values() if one["basis"] != "rough"))
+        self.assertTrue(all(one["similar"] == 0 and one["window"] is None for one in judged.values() if one["basis"] == "rough"))
+        self.assertEqual({one["window"] for one in judged.values() if one["basis"] == "close"}, {(2, 30000)})
+        self.assertGreater(sum(1 for one in judged.values() if one["basis"] == "close"), 250)
 
     def test_typical_is_a_round_number_of_dollars(self):
         judged = value.judge(market(), YEAR)
         self.assertTrue(all(isinstance(one["typical"], int) and one["typical"] % 100 == 0 for one in judged.values()))
 
-    def test_a_model_with_too_few_similar_cars_gets_no_judgement(self):
+    def test_a_model_with_too_few_similar_cars_gets_a_rough_figure_from_the_model_alone(self):
         rare = [car(9100 + n, "Roadster", 2019, 40000 + n, price=25000) for n in range(2)]
         judged = value.judge(market() + rare, YEAR)
-        self.assertNotIn("lot:9100", judged)
-        self.assertNotIn("lot:9101", judged)
+        self.assertEqual([(judged[key]["basis"], judged[key]["similar"]) for key in ("lot:9100", "lot:9101")],
+                         [("rough", 0), ("rough", 0)])
+        self.assertGreater(judged["lot:9100"]["typical"], 0)
 
     def test_cars_far_off_in_years_or_miles_are_not_similar(self):
         loner = car(9200, "Camry", 2003, 280000, price=3000)        # the market's Camrys are 2016 on, under 150,000
-        self.assertNotIn("lot:9200", value.judge(market() + [loner], YEAR))
+        self.assertEqual(value.judge(market() + [loner], YEAR)["lot:9200"]["basis"], "rough")
+
+    def test_with_none_close_the_window_widens_a_step_at_a_time_and_says_how_far(self):
+        # three Stratus within four years and 60,000 miles of the one judged, none nearer
+        wide = [car(9400, "Stratus", 2016, 100000, price=6000), car(9401, "Stratus", 2012, 60000, price=5000),
+                car(9402, "Stratus", 2013, 150000, price=4000), car(9403, "Stratus", 2019, 45000, price=9000)]
+        judged = value.judge(market() + wide, YEAR)["lot:9400"]
+        self.assertEqual((judged["basis"], judged["window"], judged["similar"]), ("wide", (4, 60000), 3))
+
+    def test_every_figure_carries_the_range_most_asking_prices_fall_in(self):
+        judged = value.judge(market(), YEAR)
+        one = next(found for found in judged.values() if found["basis"] == "close")
+        self.assertEqual((one["low"], one["high"]), (round(one["typical"] * 0.96, -2), round(one["typical"] * 1.13, -2)))
+
+    def private_market(self):
+        """The dealers' market, and 90 private sellers asking 3% less for each year of the car's age."""
+        cars = []
+        for at, model in enumerate(BASE):
+            for n in range(30):
+                year, miles = 2008 + (n * 5 + at) % 14, 60000 + (n * 41 % 100) * 1500
+                noise = 1 + ((n * 11 + at * 3) % 9 - 4) / 100
+                asks = fair(model, year, miles) * (1 - 0.03 * (YEAR + 1 - year)) * noise
+                cars.append(car(5000 + at * 100 + n, model, year, miles, round(asks), seller="private"))
+        return market() + cars
+
+    def test_a_private_sellers_car_is_set_beside_what_private_sellers_ask(self):
+        # 2026-11-21: private sellers asked 6% under dealers on a two-year-old car and 31% under on one of eleven
+        cars = self.private_market()
+        judged = value.judge(cars, YEAR)
+        off = sorted(judged[one["id"]]["typical"] / one["price"] - 1 for one in cars if one.get("seller") == "private")
+        self.assertLess(abs(off[len(off) // 2]), 0.08)              # neither all "under" nor all "over"
+        dealers = sorted(abs(judged[one["id"]]["typical"] / one["price"] - 1) for one in cars if not one.get("seller"))
+        self.assertLess(dealers[len(dealers) // 2], 0.06)           # and the dealers' cars are judged as well as before
+
+    def test_a_private_cars_figure_has_the_wider_range_private_asking_prices_show(self):
+        cars = self.private_market()
+        judged = value.judge(cars, YEAR)
+        one = next(judged[found["id"]] for found in cars if found.get("seller") == "private" and judged[found["id"]]["basis"] == "close")
+        self.assertEqual((one["low"], one["high"]), (round(one["typical"] * 0.90, -2), round(one["typical"] * 1.25, -2)))
+
+    def test_a_car_kept_apart_is_priced_but_is_nobodys_neighbour_and_teaches_nothing(self):
+        target = car(9500, "Camry", 2020, 60000)
+        branded = [car(9510 + n, "Camry", 2020, 60000 + n, price=900, apart=True) for n in range(6)]
+        alone = value.judge(market() + [target], YEAR)["lot:9500"]
+        beside = value.judge(market() + [target] + branded, YEAR)
+        self.assertEqual(beside["lot:9500"], alone)
+        self.assertGreater(beside["lot:9510"]["typical"], 10000)    # what a sound one asks, not what the six ask
+
+    def test_a_missing_engine_drive_or_body_is_taken_from_the_cars_own_model(self):
+        known = [{"make": "ford", "model": "F-150", "body": "pickup", "drive": "4wd", "cylinders": 8.0},
+                 {"make": "ford", "model": "F-150", "body": "pickup", "drive": "rwd", "cylinders": 8.0},
+                 {"make": "ford", "model": "F-150", "body": "pickup", "drive": "4wd", "cylinders": 6.0},
+                 {"make": "ford", "model": "F-150", "body": "pickup", "drive": "rwd", "cylinders": 6.0}]
+        bare = {"make": "ford", "model": "F-150", "body": None, "drive": "", "cylinders": None, "litres": None}
+        said = {"make": "ford", "model": "F-150", "body": "truck", "drive": "rwd", "cylinders": 8.0}
+        other = {"make": "ford", "model": "Pinto", "body": None}
+        filled = value._filled([bare, said, other], known)
+        self.assertEqual((filled[0]["body"], filled[0]["drive"], filled[0]["cylinders"], filled[0]["litres"]),
+                         ("pickup", "4wd", 6.0, None))                 # at a tie, the smaller as text
+        self.assertEqual((filled[1]["body"], filled[1]["drive"]), ("truck", "rwd"))     # what a car states is kept
+        self.assertIsNone(filled[2]["body"])
+
+    def test_an_odometer_or_an_age_beyond_belief_is_capped_where_the_curve_is_made(self):
+        # a dealer's odometer of 1,824,979 bent the mileage curve for every car on 2026-11-21
+        counts = {}
+        typo = value._features(car(1, "Camry", 2012, 1824979), YEAR, counts)
+        capped = value._features(car(1, "Camry", 2012, 300000), YEAR, counts)
+        self.assertEqual(typo, capped)
+        self.assertEqual(value._features(car(1, "Camry", 1947, 60000), YEAR, counts)["age"], 30)
 
     def test_too_small_a_market_judges_nothing(self):
         self.assertEqual(value.judge(market(each=10), YEAR), {})

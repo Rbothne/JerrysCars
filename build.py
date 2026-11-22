@@ -26,6 +26,7 @@ ONLINE = {"carvana"}                              # platforms that deliver a car
 OWN_IDS = 0.8          # a read where fewer than this share of the listings have an id of their own was read wrongly
 WORKERS = 32           # sources read at the same time; each site still gets one request at a time (fetch.paced)
 ONE_COMPANY = ("craigslist.org",)                 # every host under these is paced as a single site
+BRANDED = ("rebuilt", "salvage", "lien")          # titles that are priced against clean cars and never the other way
 OVER = {"sold": "sold", "reserve_not_met": "ended_unsold"}     # a price that is a sale's result -> how the listing ended
 NEAR_YEARS = 3         # model years either side that count as the same car when auction lots are set beside others
 # What a private seller's own title says about why the car is cheap. Only the title is read: the description
@@ -218,9 +219,10 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
     ("private"), `where` (the seller's word for the neighbourhood, else the city) and, as `dealer_miles`, its
     distance from its own map pin. No car is left off for being far: the page filters by distance. A listing
     without a VIN that two places both show (one address) is one car. `title_status` is what the seller says
-    of the title, and `cautions` what the seller's own title warns of ("mechanic special", "as-is"). A car
-    whose title is not clean, or that carries a caution, is shown but not judged, and is not used to judge
-    others. A private car posted again by its seller (the same year, mileage, price and map pin, and no VIN
+    of the title, and `cautions` what the seller's own title warns of ("mechanic special", "as-is").
+    `basis`, `window`, `low` and `high` say what a car's `typical` stands on (cartrack/value.py). A car with a
+    rebuilt, salvage or lien title is priced against clean cars and is never one of the cars others are
+    priced from; one for parts, with no title, or with a caution gets no figure at all. A private car posted again by its seller (the same year, mileage, price and map pin, and no VIN
     to tell by) is one car, shown once."""
     by_key = {dealer["key"]: dealer for dealer in (*dealers, *places)}
     decodes = {vin: json.loads(row) for vin, row in db.execute("SELECT vin, row_json FROM vin_decode")}
@@ -278,10 +280,13 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
             for car in lot:
                 car["certified"] = None
     sound = {car["id"] for car in cars if car["title_status"] in (None, "clean") and not car["cautions"]}
-    judged = judge([{**car, **_engine(decodes.get(car["vin"], {}))} for car in cars if car["id"] in sound], int(now[:4]))
+    apart = {car["id"] for car in cars if car["title_status"] in BRANDED and not car["cautions"]}
+    judged = judge([{**car, **_engine(decodes.get(car["vin"], {})), "apart": car["id"] in apart} for car in cars
+                    if car["id"] in sound or car["id"] in apart], int(now[:4]))
     for car in cars:
-        fair = judged.get(car["id"], {}) if car["id"] in sound else {}
-        car["typical"], car["similar"] = (fair.get(name) for name in ("typical", "similar"))
+        fair = judged.get(car["id"], {}) if car["id"] in sound or car["id"] in apart else {}
+        for name in ("typical", "similar", "basis", "window", "low", "high"):
+            car[name] = fair.get(name)
     counts = {}
     for car in cars:
         for seller in (car["dealer_key"], *car["also"]):

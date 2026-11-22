@@ -569,17 +569,32 @@ class PageData(unittest.TestCase):
         catalogue.record(self.db, detailed("a", "2026-11-21T05:00", posted="2026-11-18T23:30"))
         self.assertEqual(self.shown(now="2026-11-25T05:00")[0]["days"], 7)
 
-    def test_a_car_whose_title_is_not_clean_is_shown_but_not_judged_or_used_to_judge(self):
+    def test_a_rebuilt_salvage_or_lien_title_is_priced_against_clean_cars_and_kept_apart_from_them(self):
         catalogue.record(self.db, detailed("clean"))
         catalogue.record(self.db, detailed("rebuilt", title_status="rebuilt"))
+        catalogue.record(self.db, detailed("lien", title_status="lien"))
+        catalogue.record(self.db, detailed("parts", title_status="parts_only"))
+        catalogue.record(self.db, detailed("none", title_status="missing"))
         catalogue.record(self.db, car("peckdaniel.com", "1"))
         given = []
-        shown = self.shown(judge=lambda cars, year: given.extend(car["id"] for car in cars) or {
-            "memphis.craigslist.org:rebuilt": {"typical": 9000, "similar": 4}})
-        self.assertEqual(given, ["memphis.craigslist.org:clean", "peckdaniel.com:1"])
-        self.assertEqual([(one["id"], one["title_status"], one["typical"]) for one in shown],
-                         [("memphis.craigslist.org:clean", "clean", None), ("memphis.craigslist.org:rebuilt", "rebuilt", None),
-                          ("peckdaniel.com:1", None, None)])
+        shown = self.shown(judge=lambda cars, year: given.extend((car["id"].split(":")[1], car["apart"], car["seller"])
+                                                                 for car in cars) or {
+            car["id"]: {"typical": 9000, "similar": 4, "basis": "wide", "window": (4, 60000), "low": 7600, "high": 13200}
+            for car in cars})
+        self.assertEqual(given, [("clean", False, "private"), ("lien", True, "private"), ("rebuilt", True, "private"),
+                                 ("1", False, "dealer")])
+        self.assertEqual({one["id"].split(":")[1]: one["typical"] for one in shown},
+                         {"clean": 9000, "lien": 9000, "rebuilt": 9000, "parts": None, "none": None, "1": 9000})
+
+    def test_a_car_says_what_its_figure_stands_on(self):
+        catalogue.record(self.db, car("peckdaniel.com", "1"))
+        catalogue.record(self.db, car("peckdaniel.com", "2"))
+        first, second = self.shown(judge=lambda cars, year: {
+            "peckdaniel.com:1": {"typical": 9000, "similar": 4, "basis": "wide", "window": (4, 60000), "low": 8500, "high": 10700}})
+        self.assertEqual({name: first[name] for name in ("typical", "similar", "basis", "window", "low", "high")},
+                         {"typical": 9000, "similar": 4, "basis": "wide", "window": (4, 60000), "low": 8500, "high": 10700})
+        self.assertEqual({name: second[name] for name in ("typical", "similar", "basis", "window", "low", "high")},
+                         {"typical": None, "similar": None, "basis": None, "window": None, "low": None, "high": None})
 
     def test_a_private_car_whose_own_title_says_why_it_is_cheap_carries_the_warning_and_is_not_judged(self):
         # top of the page on 2026-11-21: "2020 Chrysler Pacifica - Mechanic Special / As-Is - $3,500", "$6,200 under"

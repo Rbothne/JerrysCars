@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { DIRECTIONS, amount, lotCost, lotsSorted, sorted, under, visible } from "../../site/logic.js";
+import { DIRECTIONS, amount, lotCost, lotsSorted, marked, sorted, under, visible } from "../../site/logic.js";
 
 const camry = { id: "a:1", title: "2012 Toyota Camry LE", make: "toyota", model: "Camry", year: 2012, body: "sedan", drive: "fwd", fuel: "hybrid", kind: "lot",
   price: 6500, was: null, drop: 0, miles: 134200, days: 4, dealer_key: "a", typical: 8000, similar: 6 };
@@ -317,4 +317,36 @@ test("the search and make filters work on lots as they do on cars", () => {
   assert.deepEqual(ids(visible([lotA, lotB, lotC], { text: "camry" })), ["v:1-1"]);
   assert.deepEqual(ids(visible([lotA, lotB, lotC], { make: "ford" })), ["v:0-9"]);
   assert.deepEqual(ids(visible([lotA, lotB, lotC], { maxPrice: 1000 })), ["v:1-1", "v:1-2"]);
+});
+
+// ---- what a figure stands on ---------------------------------------------------------------------------------------
+
+const figure = (price, more) => ({ id: `f:${price}`, title: "a car", price, typical: 10000, similar: 4, ...more });
+
+test("a dealer's car with close matches is marked a tenth under, with wider matches at 15%", () => {
+  assert.deepEqual(marked(figure(8900, { basis: "close" })), { amount: 1100, share: 0.11 });
+  assert.equal(marked(figure(9100, { basis: "close" })), null);
+  assert.equal(marked(figure(8900, { basis: "wide" })), null);
+  assert.deepEqual(marked(figure(8400, { basis: "wide" })), { amount: 1600, share: 0.16 });
+});
+
+test("a private seller's car is marked only at 30% under what private sellers ask", () => {
+  assert.equal(marked(figure(7500, { seller: "private", basis: "close" })), null);
+  assert.deepEqual(marked(figure(6900, { seller: "private", basis: "wide" })), { amount: 3100, share: 0.31 });
+});
+
+test("a rough figure, or a title that is not clean, never earns a mark", () => {
+  assert.equal(marked(figure(4000, { basis: "rough" })), null);
+  assert.equal(marked(figure(4000, { seller: "private", basis: "rough" })), null);
+  assert.equal(marked(figure(4000, { seller: "private", basis: "close", title_status: "rebuilt" })), null);
+  assert.deepEqual(marked(figure(4000, { seller: "private", basis: "close", title_status: "clean" })), { amount: 6000, share: 0.6 });
+});
+
+test("below typical only, and the best-value order, go by the mark and leave rough figures out", () => {
+  const close = figure(8000, { basis: "close" });
+  const rough = figure(3000, { basis: "rough" });
+  const branded = figure(2000, { basis: "close", title_status: "salvage" });
+  const fair = figure(9500, { basis: "close" });
+  assert.deepEqual(ids(visible([close, rough, branded, fair], { underOnly: true })), ["f:8000"]);
+  assert.deepEqual(ids(sorted([fair, rough, branded, close], "value")), ["f:8000", "f:9500", "f:3000", "f:2000"]);
 });

@@ -14,6 +14,19 @@ export function under(car) {
   return { amount: car.typical - car.price, share: (car.typical - car.price) / car.typical };
 }
 
+// How far under its figure a car must ask before the page marks it: about one and a half times how far off such
+// a figure usually is. A figure from the model alone ("rough") is never enough, whatever it says.
+const MARKS = { dealer: { close: NOTABLE, wide: 0.15 }, private: { close: 0.3, wide: 0.3 } };
+const clean = (car) => !car.title_status || car.title_status === "clean";
+
+/** `under(car)` when the car is far enough under to be worth a mark, given who is selling and what its figure
+ *  stands on; null otherwise. A car whose title is not clean is set beside clean cars and never marked. */
+export function marked(car) {
+  const below = under(car);
+  const need = MARKS[car.seller === "private" ? "private" : "dealer"][car.basis || "close"];
+  return below && need && clean(car) && below.share >= need ? below : null;
+}
+
 // ---- search ----------------------------------------------------------------------------------------------------
 // A typed word matches a car when the car's title, make or model contains it, punctuation aside ("crv" finds
 // CR-V). A word with letters and digits also matches across a space ("f150" finds "F 150"); plain letters do
@@ -113,7 +126,7 @@ export function visible(cars, filters) {
     if (filters.cleanOnly && car.title_status && car.title_status !== "clean") return false;
     if (filters.localOnly && car.kind === "online") return false;
     if (filters.droppedOnly && !car.drop) return false;
-    if (filters.underOnly && !((under(car) || {}).share >= NOTABLE)) return false;
+    if (filters.underOnly && !marked(car)) return false;
     if (filters.oneOwnerOnly && car.one_owner !== true) return false;
     if (filters.certifiedOnly && car.certified !== true) return false;
     if (filters.historyOnly && !car.history) return false;
@@ -125,7 +138,7 @@ const share = (car) => (car.drop && car.was ? car.drop / car.was : 0);
 
 // What each sort field measures. Null means the car lacks the figure, and it then goes last either way.
 const figures = {
-  value: (car) => (car.typical ? (car.typical - car.price) / car.typical : null),
+  value: (car) => (car.typical && car.basis !== "rough" && clean(car) ? (car.typical - car.price) / car.typical : null),
   price: (car) => car.price,
   drop: (car) => car.drop || 0,
   share,
