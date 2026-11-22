@@ -346,6 +346,56 @@ class LienSales(unittest.TestCase):
         self.assertEqual(build.page_data(self.db, [PECK], NOW, places=[NOTICES], area=AREA)["cars"][0]["id"], "peckdaniel.com:0")
 
 
+FACEBOOK = {"key": "facebook.com", "kind": "facebook", "name": "Facebook Marketplace (seen while browsing)",
+            "url": "https://raw.githubusercontent.com/x/y/main/facebook.json", "unseen_days": 14}
+
+
+def seen_on_facebook(source_id, seen, **fields):
+    return make_listing("facebook.com", source_id, **{
+        "url": f"https://www.facebook.com/marketplace/item/{source_id}/", "title": "2012 Honda Civic LX", "seen": seen,
+        "channel": "marketplace", "seller_type": "private", "price": 4500, "year": 2012, "miles": 142350,
+        "extra": {"last_seen": seen}, **fields})
+
+
+class SeenWhileBrowsing(unittest.TestCase):
+    def setUp(self):
+        self.db = catalogue.open_catalogue(":memory:")
+        self.addCleanup(self.db.close)
+
+    def run_build(self, *cars, now):
+        def read(place, get, when, known=()):
+            return list(cars), False
+        return build.read_sources(self.db, [FACEBOOK], {"facebook": read}, None, now, say=lambda line: None)
+
+    def row(self, key):
+        return self.db.execute("SELECT * FROM listing WHERE source_id = ?", (key,)).fetchone()
+
+    def test_a_car_is_recorded_when_he_saw_it_and_goes_when_he_has_not_seen_it_for_two_weeks(self):
+        self.run_build(seen_on_facebook("1", "2026-11-01T10:00"), seen_on_facebook("2", "2026-11-20T10:00"), now="2026-11-21T05:00")
+        self.assertEqual(self.row("1")["last_seen"], "2026-11-01T10:00")
+        self.assertEqual((self.row("1")["gone_how"], self.row("2")["gone"]), ("unseen", None))     # 20 days unseen
+
+    def test_a_month_without_browsing_lets_everything_go_though_nothing_else_was_seen(self):
+        self.run_build(seen_on_facebook("1", "2026-11-20T10:00"), now="2026-11-21T05:00")
+        self.run_build(now="2026-12-10T05:00")
+        self.assertEqual(self.row("1")["gone_how"], "unseen")
+
+    def test_a_car_seen_marked_sold_is_over_then_and_keeps_its_asking_price(self):
+        sold = seen_on_facebook("1", "2026-11-20T10:00", price=3900)
+        sold["over"] = {"when": "2026-11-19T18:30", "how": "sold"}
+        self.run_build(sold, now="2026-11-21T05:00")
+        row = self.row("1")
+        self.assertEqual((row["gone"], row["gone_how"], row["price"], row["price_kind"]), ("2026-11-19T18:30", "sold", 3900, "ask"))
+        self.run_build(sold, now="2026-11-22T05:00")
+        self.assertEqual(self.row("1")["gone"], "2026-11-19T18:30")               # read again, the date does not move
+
+    def test_a_car_seen_while_browsing_says_when_he_last_saw_it_and_its_distance_is_rough(self):
+        self.run_build(seen_on_facebook("1", "2026-11-20T10:00", lat=35.11, lon=-89.95, geo_how="city"), now="2026-11-21T05:00")
+        shown = build.page_data(self.db, [], "2026-11-21T05:00", places=[FACEBOOK], area=AREA)["cars"][0]
+        self.assertEqual((shown["last_seen"], shown["approx"], shown["seller"], shown["guessed"]),
+                         ("2026-11-20T10:00", True, "private", False))
+
+
 class SideBySide(unittest.TestCase):
     """Every source is asked at once, each at its own site's pace, so a run takes as long as its slowest site
     and not as long as all of them added up."""

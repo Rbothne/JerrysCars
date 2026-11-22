@@ -1,7 +1,7 @@
 # CraigsCars
 
 A catalogue of used cars for sale around Memphis, Tennessee, with their price history, and a page that shows them.
-It reads dealers' own websites, Craigslist's for-sale-by-owner listings in seven cities, the City of Memphis impound auction, and the tow-lot and garage lien sales announced in The Daily News. The dealers are the yardstick; the
+It reads dealers' own websites, Craigslist's for-sale-by-owner listings in seven cities, OfferUp in five, the Facebook Marketplace listings its owner sees while browsing, the City of Memphis impound auction, and the tow-lot and garage lien sales announced in The Daily News. The dealers are the yardstick; the
 cars worth finding are the ones priced well under them.
 
 Python standard library only. Tested with Python 3.14 and Node 26.
@@ -13,6 +13,7 @@ Python standard library only. Tested with Python 3.14 and Node 26.
 | Dealer discovery | `discover.py`, `cartrack/dealers.py` | Dealers within the radius of the home point, and the website platform each runs on. Writes `dealers.json`. |
 | Readers | `cartrack/readers/` | One per dealer platform: DealerOn, AutoRevo, Dealer Car Search, Team Velocity, DealerFire, Dealer Alchemist, DealerCenter, Carsforsale.com, Carvana. Each gives back listings and whether it saw the whole inventory. |
 | Other sources | `cartrack/sources/` | Readers for places that are not one dealer's website, listed by hand in `sources.json`. Craigslist by owner: one search page a city a run, and each listing's own page once. The City of Memphis impound auction: the coming sale's lots every run, and each finished sale once, for what its lots sold for. |
+| Facebook capture | `extension/facebook/`, `extension/facebook-firefox/` | A Chrome and a Firefox extension (one set of scripts; `py extension/make_firefox.py` writes the Firefox copy) that keeps the vehicle listings seen while browsing Marketplace, without the sellers, and uploads them as one file the build reads. Setup in its README. |
 | Naming | `cartrack/identify.py` | Make and model for a listing that gives them only in the seller's words ("chevy silverado lt"), matched against the models the catalogue knows from decoded VINs. |
 | Listing record | `cartrack/listings.py` | `make_listing()`: the one record every reader hands back. `None` means the source does not say. |
 | Catalogue | `cartrack/catalogue.py` | One SQLite file, `data/catalogue.db`: listings, price points added only on change, seen-spans, gone and back, VIN decodes, dealers. |
@@ -30,8 +31,8 @@ Python standard library only. Tested with Python 3.14 and Node 26.
     py discover.py                              # rewrites dealers.json and the catalogue's dealer table
     py build.py                                 # reads the sources and dealers, updates data/catalogue.db and site/data/cars.json
     py -m http.server 8000 --directory site     # then open http://localhost:8000
-    py -m unittest discover -s tests -t .       # 402 Python tests
-    node --test tests/js/logic.test.mjs         # 64 page-logic tests
+    py -m unittest discover -s tests -t .       # 426 Python tests
+    node --test tests/js/*.test.mjs             # 72 page-logic and capture tests
 
 ## Publishing the page
 
@@ -60,6 +61,20 @@ run log and keeps its last known cars.
 - A lot states no mileage, keys, running condition or title, so it has no asking price and is never ranked with the cars for sale. It lives on its own page. A lot with a result is closed the moment it is recorded: "sold", or "ended_unsold" for one the auctioneer marked no-sale.
 - `sources.json` carries the auction's own charges (`premium` 0.1, `fee` 10, `card` 0.04), which the page uses to say what a bid costs before tax.
 - Not seen yet: what an open lot shows once prebidding starts (read as the bid so far, as the auctioneer's sister site showed it), and whether the site answers GitHub's servers.
+
+## OfferUp (seen 2026-11-22, from a home connection)
+
+- **OfferUp's terms forbid collecting its listings by program** (terms of 21 July 2026). It is read because the owner chose to; robots.txt allows the pages used, and they are read three seconds apart.
+- `https://offerup.com/c/cars-and-trucks/in/{city}` and `?page=N` hold 50 cards a page, newest first, within OfferUp's 30 miles of the city. Memphis gave 995 cars in 21 pages; Jonesboro, Jackson TN, Tupelo and Little Rock are read the same way. A whole read each run, so a car that leaves is marked gone.
+- A card says nothing of who is selling, so the seller is guessed from how the price is written: a round fifty is taken as private, odd whole dollars or a paid tile as a dealer, and the card says "looks like". On the Memphis read 581 looked private, 237 a dealer's, 177 could not be told. 359 of the private-looking cars ask under $5,000.
+- A card gives no map point, no posting time and no VIN, and its own page sits behind a challenge and is not read. A car is placed at the middle of the city searched, so its distance is rough; days listed count from when the tracker first saw it.
+
+## Facebook Marketplace
+
+- Not read from a server at all. The extension in `extension/facebook/` keeps what the owner sees while browsing and writes it to a separate public repository; each install writes `captures/<name>.json` there, and the build reads every file in that folder (`repo` on the `facebook.com` row of `sources.json`; `CAPTURES_TOKEN`, an Actions secret, if the repository is private). Until the extension has uploaded, the file is missing and the source reads as empty.
+- **Meta's terms forbid collecting its data by automated means, and the extension runs in the owner's account.** It makes no request of its own and keeps no seller's name, description or phone; everything it keeps is published in that repository.
+- A car is recorded at the time he last saw it, goes off the page 14 days after that (`unseen_days`), and goes at once when he saw it marked sold. Its price then stays an asking price. Nothing is marked gone for being missing from the file, since he never sees all of Marketplace.
+- Not tested against Facebook itself: the field names come from other people's code, so the first real capture is the test. The popup lists the vehicle field names it sees, to settle the ones not known (the VIN's, the title's).
 
 ## Lien sales (seen 2026-11-22, from a home connection)
 
@@ -188,7 +203,7 @@ Seen on the build of 2026-11-21 (3,602 cars):
 
 ## Not built yet
 
-- Readers for government surplus and lenders' repossessions, the Commercial Appeal's sale notices, eBay Motors (needs a developer key), and the Facebook extension.
+- Readers for government surplus and lenders' repossessions, the Commercial Appeal's sale notices, and eBay Motors (needs a developer key).
 - A watcher that checks Craigslist every quarter of an hour and sends an alert (`research/11-alerts-and-cadence.md`).
 - Craigslist's by-dealer listings, and reposts of one car under a new listing.
 - Linking the same car across listings by photo or phone. Today only a shared VIN links two listings.

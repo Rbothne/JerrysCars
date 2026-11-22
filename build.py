@@ -32,7 +32,7 @@ OVER = {"sold": "sold", "reserve_not_met": "ended_unsold"}     # a price that is
 NEAR_YEARS = 3         # model years either side that count as the same car when auction lots are set beside others
 
 
-def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR, announced=False):
+def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR, announced=False, unseen_days=None):
     """Run one read and record what it found under `source`. Returns the report line for it.
 
     Two things a read can get wrong without failing are caught here. A reader that takes the wrong thing for
@@ -41,7 +41,10 @@ def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR, anno
     gone: so a listing no read has found for three days is let go whatever the reads called themselves.
 
     `announced` is for a source that says once that something will be sold on a later day (a lien sale's
-    notice): its listings are not let go for going unseen, and expire the day after the day they named."""
+    notice): its listings are not let go for going unseen, and expire the day after the day they named.
+    `unseen_days` is for a source that is what one person saw (Facebook): its listings go when he has not seen
+    them for that long, whatever else is seen. A listing that comes with `over` ({"when", "how"}) is over then:
+    a car seen marked sold, whose price stays an asking price."""
     line = {"dealer": key, "platform": platform, "ok": False, "read": 0, "new": 0, "gone": 0, "complete": None,
             "error": None}
     try:
@@ -53,8 +56,12 @@ def _keep(db, key, platform, source, read, now, say, floor=catalogue.FLOOR, anno
         for listing in listed.values():               # an auction's result: the lot is over, and says how
             if listing["price_kind"] in OVER:
                 catalogue.end(db, listing["id"], listing["ends"] or now, OVER[listing["price_kind"]])
+            elif listing.get("over"):                 # seen marked sold, the price still an asking price
+                catalogue.end(db, listing["id"], listing["over"]["when"], listing["over"]["how"])
         line.update(read=len(listed), new=outcomes.count("new"), complete=complete)
-        line["gone"] = catalogue.expire(db, source, now) if announced else catalogue.age_out(db, source, now)
+        line["gone"] = (catalogue.expire(db, source, now) if announced
+                        else catalogue.age_out(db, source, now, unseen_days, fresh=False) if unseen_days
+                        else catalogue.age_out(db, source, now))
         if complete:
             line["gone"] += catalogue.close_out(db, source, list(listed), now, floor)
         line["ok"] = True
@@ -90,6 +97,7 @@ def source_jobs(db, places, readers, get, now):
             (place["key"],))}
         jobs.append({"key": place["key"], "platform": place["kind"], "source": place["key"],
                      "floor": place.get("floor", catalogue.FLOOR), "announced": place.get("kind") in ANNOUNCED,
+                     "unseen_days": place.get("unseen_days"),
                      "read": functools.partial(read, place, get, now, known=known)})
     return jobs
 
@@ -102,7 +110,8 @@ def run(db, jobs, now, say=print, workers=1):
     run takes as long as its slowest site, not as long as all of them added up, and no site is asked any
     faster for it: the `get` the readers share (fetch.paced) still gives each site one request at a time."""
     def keep(job, read):
-        return _keep(db, job["key"], job["platform"], job["source"], read, now, say, job["floor"], job.get("announced", False))
+        return _keep(db, job["key"], job["platform"], job["source"], read, now, say, job["floor"], job.get("announced", False),
+                     job.get("unseen_days"))
     if workers <= 1 or len(jobs) <= 1:
         return [keep(job, job["read"]) for job in jobs]
     with concurrent.futures.ThreadPoolExecutor(max_workers=min(workers, len(jobs))) as pool:
@@ -263,7 +272,8 @@ def page_data(db, dealers, now, report=None, judge=value.judge, places=(), area=
             "seller": row["seller_type"] or ("dealer" if on_lot else None),
             "title_status": row["title_status"],
             "cautions": flags.say(raised, flags.OUT) + worn, "notes": flags.say(raised, flags.SHOWN),
-            "approx": extra.get("pin") == 22,
+            "approx": extra.get("pin") == 22 or row["geo_how"] == "city",
+            "guessed": bool(extra.get("seller_guessed")), "last_seen": extra.get("last_seen"),
             "where": None if on_lot else extra.get("where") or row["city"],
             "dealer": row["seller_name"] if not dealer else dealer.get("name"), "dealer_key": row["source"],
             "dealer_miles": away, "city": row["city"], "state": row["state"],

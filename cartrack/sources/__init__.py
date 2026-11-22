@@ -6,10 +6,12 @@ that needs a page per listing asks for each one once and afterwards only for wha
 title and whether it is still there. The catalogue keeps what an earlier read gave wherever a later one is
 silent. For an auction, `known` holds the lots already recorded as over, so a finished sale is read once."""
 
-from . import auctioneersoftware, craigslist, liennotices
+from . import auctioneersoftware, craigslist, facebook, liennotices, offerup
 
 SOURCES = {
     "auctioneersoftware": auctioneersoftware.read,
     "craigslist": craigslist.read,
+    "facebook": facebook.read,
     "liennotices": liennotices.read,
+    "offerup": offerup.read,
 }

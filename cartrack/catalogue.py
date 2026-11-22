@@ -239,20 +239,21 @@ def expire(db, source, when):
             "AND substr(ends, 1, 10) < substr(?, 1, 10)", (when, source, when)).rowcount
 
 
-def age_out(db, source, when, days=UNSEEN_DAYS):
+def age_out(db, source, when, days=UNSEEN_DAYS, fresh=True):
     """Mark `source`'s live listings gone when no read has found them for `days`, though reads since have found
     others. Returns how many. close_out decides "gone" only from a whole read that did not shrink, and some
     reads are never quite whole (a count that moves while the pages are fetched, a second page never asked
     for) or shrink for good (a lot that sold half its cars); this is what lets those listings go. A source
     not read at all in that time keeps everything: its silence says nothing about its cars.
     Do not call it for a source whose list is cut short by design, where an old listing drops off the end
-    while still for sale."""
+    while still for sale. With `fresh` False the calendar alone decides: for a source that is only what one
+    person happened to see, whose silence does say something about each car."""
     cutoff = (datetime.datetime.fromisoformat(when) - datetime.timedelta(days=days)).strftime("%Y-%m-%dT%H:%M")
     with db:
         return db.execute(
             "UPDATE listing SET gone = ?, gone_how = 'unseen' WHERE source = ? AND gone IS NULL AND last_seen <= ? "
-            "AND EXISTS (SELECT 1 FROM listing fresh WHERE fresh.source = ? AND fresh.last_seen > ?)",
-            (when, source, cutoff, source, cutoff)).rowcount
+            "AND (? OR EXISTS (SELECT 1 FROM listing fresh WHERE fresh.source = ? AND fresh.last_seen > ?))",
+            (when, source, cutoff, int(not fresh), source, cutoff)).rowcount
 
 
 def undecoded(db):

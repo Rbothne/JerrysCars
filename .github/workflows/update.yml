@@ -48,6 +48,8 @@ jobs:
       # dealer failed, and then the data branch and the page are left as they were.
       - name: Read the dealers and update the catalogue
         run: python build.py
+        env:
+          CAPTURES_TOKEN: ${{ secrets.CAPTURES_TOKEN }}     # only needed while the captures repository is private
 
       - name: Save the data
         run: bash .github/scripts/data-branch.sh save

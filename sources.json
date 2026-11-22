@@ -7,5 +7,11 @@
  {"key": "jacksontn.craigslist.org", "kind": "craigslist", "site": "jacksontn", "name": "Craigslist: Jackson, TN", "floor": 0.5},
  {"key": "semo.craigslist.org", "kind": "craigslist", "site": "semo", "name": "Craigslist: Southeast Missouri", "floor": 0.5},
  {"key": "littlerock.craigslist.org", "kind": "craigslist", "site": "littlerock", "name": "Craigslist: Little Rock", "floor": 0.5},
- {"key": "shoals.craigslist.org", "kind": "craigslist", "site": "shoals", "name": "Craigslist: Muscle Shoals", "floor": 0.5}
+ {"key": "shoals.craigslist.org", "kind": "craigslist", "site": "shoals", "name": "Craigslist: Muscle Shoals", "floor": 0.5},
+ {"key": "offerup.com/memphis-tn", "kind": "offerup", "site": "memphis-tn", "name": "OfferUp: Memphis", "lat": 35.1495, "lon": -90.049, "floor": 0.5},
+ {"key": "offerup.com/jonesboro-ar", "kind": "offerup", "site": "jonesboro-ar", "name": "OfferUp: Jonesboro", "lat": 35.8423, "lon": -90.7043, "floor": 0.5},
+ {"key": "offerup.com/jackson-tn", "kind": "offerup", "site": "jackson-tn", "name": "OfferUp: Jackson, TN", "lat": 35.6145, "lon": -88.8139, "floor": 0.5},
+ {"key": "offerup.com/tupelo-ms", "kind": "offerup", "site": "tupelo-ms", "name": "OfferUp: Tupelo", "lat": 34.2576, "lon": -88.7034, "floor": 0.5},
+ {"key": "offerup.com/little-rock-ar", "kind": "offerup", "site": "little-rock-ar", "name": "OfferUp: Little Rock", "lat": 34.7465, "lon": -92.2896, "floor": 0.5},
+ {"key": "facebook.com", "kind": "facebook", "name": "Facebook Marketplace (seen while browsing)", "unseen_days": 14, "repo": "Rbothne/jerryscars-captures"}
 ]

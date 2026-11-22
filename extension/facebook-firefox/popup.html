@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Car capture</title>
+<style>
+  body { font: 13px/1.4 system-ui, "Segoe UI", sans-serif; width: 320px; margin: 12px; color: #1c1b19; }
+  h1 { font-size: 15px; margin: 0 0 8px; }
+  p { margin: 4px 0; }
+  .warn { color: #a43a1c; font-weight: 600; }
+  label { display: grid; gap: 2px; margin: 8px 0; font-size: 12px; color: #66635c; }
+  input[type=text], input[type=password] { font: inherit; padding: 4px 6px; border: 1px solid #ccc; border-radius: 4px; }
+  button { font: inherit; padding: 4px 10px; margin-right: 6px; }
+  details { margin-top: 8px; color: #66635c; font-size: 12px; }
+</style>
+</head>
+<body>
+<h1>Car capture</h1>
+<p id="allow-line"><button id="allow" hidden>Allow it on facebook.com and api.github.com</button></p>
+<p id="count"></p>
+<p id="today"></p>
+<p id="blind" class="warn" hidden>On Marketplace, but nothing recognised today. Facebook may have changed its pages.</p>
+<p id="upload"></p>
+<label><input type="checkbox" id="paused"> Paused: keep nothing new</label>
+<label>Repository to write to (owner/name)
+  <input type="text" id="repo" placeholder="Rbothne/jerryscars-captures" autocomplete="off">
+</label>
+<label>Name for your file (letters, digits, dashes)
+  <input type="text" id="who" autocomplete="off">
+</label>
+<p id="where"></p>
+<label>Fine-grained token for that repository only (Contents: read and write)
+  <input type="password" id="token" placeholder="kept in this browser only" autocomplete="off">
+</label>
+<button id="save">Save</button><button id="now">Upload now</button>
+<details><summary>Vehicle field names seen</summary><p id="keys"></p></details>
+<script src="popup.js"></script>
+</body>
+</html>

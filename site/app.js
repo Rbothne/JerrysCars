@@ -61,7 +61,8 @@ function card(car) {
   if (web(car.url)) Object.assign(link, { href: car.url, rel: "noopener noreferrer", target: "_blank" });
   heading.append(link);
   body.append(heading, make("div", "price", dollars.format(car.price)));
-  const fee = car.seller === "private" ? "private sale, no dealer fee"
+  const fee = car.guessed ? (car.seller === "private" ? "looks like a private sale" : car.seller === "dealer" ? "looks like a dealer's" : "seller not known")
+    : car.seller === "private" ? "private sale, no dealer fee"
     : car.fees ? `includes ${dollars.format(car.fees)} dealer fee` : "dealer fee not stated";
   body.append(make("p", "total", car.total ? `${fee} · about ${dollars.format(car.total)} with tax` : fee));
   if (TITLES[car.title_status]) body.append(make("div", "branded", `${TITLES[car.title_status]}, the seller says`));
@@ -103,7 +104,8 @@ function card(car) {
   const away = car.dealer_miles == null ? "" : ` · ${car.approx ? "about " : ""}${Math.round(car.dealer_miles)} mi away`;
   const also = car.places <= 1 ? "" : (car.also || []).length ? ` · on ${car.places} sites` : ` · posted ${car.places} times`;
   const where = car.where ? ` · ${car.where}` : "";
-  body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${where}${away}${also}`));
+  const lastSeen = car.last_seen ? ` · you last saw it ${car.last_seen.slice(0, 10)}` : "";
+  body.append(make("p", "dealer", `${car.dealer || car.dealer_key}${where}${away}${also}${lastSeen}`));
   if (car.vin) body.append(make("p", "vin", car.vin));
   const checks = make("p", "checks");
   const outside = (text, href) => Object.assign(make("a", "", text), { href, rel: "noopener noreferrer", target: "_blank" });

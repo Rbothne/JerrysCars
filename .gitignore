@@ -2,3 +2,6 @@ __pycache__/
 data/
 site/data/
 research/_scratch/
+# the Marketplace capture's token: kept on this machine only, never committed
+extension/**/config.local.json
+extension/dist/
